@@ -1,0 +1,13 @@
+services:
+  deepseek-bot:
+    build: .
+    restart: always
+    env_file: .env
+    volumes:
+      - ./messageHistory.json:/app/messageHistory.json
+    networks:
+      - bot-network
+
+networks:
+  bot-network:
+    external: true

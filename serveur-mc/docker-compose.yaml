@@ -1,0 +1,10 @@
+services:
+  bot:
+    build: .
+    container_name: my-mc-bot
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python minecraft-bot.py
