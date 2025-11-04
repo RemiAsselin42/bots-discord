@@ -253,17 +253,15 @@ async def list_command(interaction: discord.Interaction):
 
 @tree.command(name="addserver", description="Ajoute un nouveau serveur Minecraft à la configuration")
 @app_commands.describe(
-    key="Identifiant unique du serveur (ex: survival, creative, modded)",
     name="Nom affiché du serveur",
     instance_id="ID de l'instance EC2 AWS (ex: i-xxxxxxxxxxxxx)",
-    region="Région AWS (ex: eu-north-1, us-east-1)"
+    duckdns_domain="(Optionnel) Domaine DuckDNS (ex: mc-rgl ou mc-rgl.duckdns.org)"
 )
 async def addserver_command(
     interaction: discord.Interaction,
-    key: str,
     name: str,
     instance_id: str,
-    region: str
+    duckdns_domain: str = None
 ):
     if not interaction.guild:
         await interaction.response.send_message("❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True)
@@ -281,10 +279,15 @@ async def addserver_command(
         await interaction.response.send_message("❌ Format d'instance_id invalide. Exemple: `i-0123456789abcdef0`", ephemeral=True)
         return
     
-    # Valider la key (pas d'espaces, caractères spéciaux limités)
-    if not key.replace("_", "").replace("-", "").isalnum():
-        await interaction.response.send_message("❌ La clé doit contenir uniquement des lettres, chiffres, tirets et underscores.", ephemeral=True)
-        return
+    # Générer automatiquement la clé depuis le nom (slug)
+    import re
+    key = re.sub(r'[^a-z0-9_-]', '', name.lower().replace(' ', '-'))
+    if not key:
+        key = "world"
+    
+    # Valeurs fixes
+    region = "eu-north-1"
+    minecraft_port = "25565"
     
     # Charger la config actuelle
     global config
@@ -299,26 +302,42 @@ async def addserver_command(
     
     # Vérifier si le serveur existe déjà
     if key in config["guilds"][guild_str]["servers"]:
-        await interaction.response.send_message(f"❌ Un serveur avec la clé `{key}` existe déjà. Utilisez une clé différente ou supprimez l'ancien serveur d'abord.", ephemeral=True)
-        return
+        # Ajouter un suffixe numérique si la clé existe déjà
+        counter = 2
+        original_key = key
+        while key in config["guilds"][guild_str]["servers"]:
+            key = f"{original_key}-{counter}"
+            counter += 1
     
     # Ajouter le nouveau serveur
-    config["guilds"][guild_str]["servers"][key] = {
+    server_data = {
         "name": name,
         "instance_id": instance_id,
-        "region": region
+        "region": region,
+        "minecraft_port": minecraft_port
     }
+    
+    # Ajouter le domaine DuckDNS s'il est fourni
+    if duckdns_domain:
+        server_data["duckdns_domain"] = duckdns_domain
+    
+    config["guilds"][guild_str]["servers"][key] = server_data
     
     # Sauvegarder la configuration
     try:
         save_config(config)
-        await interaction.response.send_message(
+        message = (
             f"✅ Serveur **{name}** (`{key}`) ajouté avec succès !\n\n"
             f"📋 **Détails :**\n"
             f"• Instance: `{instance_id}`\n"
-            f"• Région: `{region}`\n\n"
-            f"Utilisez `/start {key}` pour le démarrer."
+            f"• Région: `{region}` (fixe)\n"
+            f"• Port: `{minecraft_port}` (fixe)\n"
         )
+        if duckdns_domain:
+            message += f"• Domaine DuckDNS: `{duckdns_domain}`\n"
+        message += f"\nUtilisez `/start {name}` pour le démarrer."
+        
+        await interaction.response.send_message(message)
     except Exception as e:
         await interaction.response.send_message(f"❌ Erreur lors de la sauvegarde : {str(e)}", ephemeral=True)
 
@@ -359,6 +378,78 @@ async def removeserver_command(interaction: discord.Interaction, server: str):
         await interaction.response.send_message(f"✅ Serveur **{name}** (`{server}`) supprimé avec succès.")
     except Exception as e:
         await interaction.response.send_message(f"❌ Erreur lors de la sauvegarde : {str(e)}", ephemeral=True)
+
+@tree.command(name="ip", description="Obtient l'adresse IP ou le domaine du serveur Minecraft")
+@app_commands.describe(server="Sélectionnez le serveur")
+@app_commands.autocomplete(server=server_autocomplete)
+async def ip_command(interaction: discord.Interaction, server: str):
+    if not interaction.guild:
+        await interaction.response.send_message("❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True)
+        return
+    
+    server_config = get_server_config(interaction.guild.id, server)
+    if not server_config:
+        await interaction.response.send_message("❌ Serveur introuvable dans la configuration.", ephemeral=True)
+        return
+    
+    instance_id = server_config.get("instance_id")
+    name = server_config.get("name", server)
+    duckdns_domain = server_config.get("duckdns_domain")
+    minecraft_port = server_config.get("minecraft_port", "25565")
+    
+    # Si un domaine DuckDNS est configuré, on l'affiche en priorité
+    if duckdns_domain:
+        full_domain = duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"
+        message = f"🌐 **Adresse du serveur {name} :**\n\n"
+        message += f"```{full_domain}:{minecraft_port}```\n"
+        await interaction.response.send_message(message)
+        return
+    
+    # Sinon, on tente de récupérer l'IP publique via AWS
+    if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
+        await interaction.response.send_message(
+            "❌ L'ID d'instance configuré est invalide. Impossible de récupérer l'IP.", ephemeral=True
+        )
+        return
+    
+    try:
+        await interaction.response.defer()  # L'opération peut prendre un peu de temps
+        
+        ec2 = get_ec2_client(server_config["region"])
+        response = ec2.describe_instances(InstanceIds=[instance_id])
+        
+        if not response["Reservations"]:
+            await interaction.followup.send("❌ Instance introuvable.")
+            return
+        
+        instance = response["Reservations"][0]["Instances"][0]
+        state = instance["State"]["Name"]
+        
+        if state != "running":
+            await interaction.followup.send(
+                f"⚠️ Le serveur **{name}** n'est pas en cours d'exécution (état: **{state}**).\n"
+                f"Démarrez-le d'abord avec `/start {server}`"
+            )
+            return
+        
+        public_ip = instance.get("PublicIpAddress")
+        
+        if not public_ip:
+            await interaction.followup.send(
+                f"❌ Le serveur **{name}** n'a pas d'adresse IP publique.\n"
+            )
+            return
+        
+        message = f"🌐 **Adresse du serveur {name} :**\n\n"
+        message += f"```{public_ip}:{minecraft_port}```\n"
+        
+        await interaction.followup.send(message)
+        
+    except (ClientError, NoCredentialsError, EndpointConnectionError, BotoCoreError, Exception) as e:
+        await interaction.followup.send(
+            format_boto_error(e, action="récupérer l'IP du serveur", instance_id=instance_id, region=server_config.get("region")),
+            ephemeral=True,
+        )
 
 # === Lancer le bot ===
 bot.run(DISCORD_TOKEN)

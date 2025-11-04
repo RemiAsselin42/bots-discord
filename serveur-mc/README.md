@@ -17,6 +17,7 @@ Bot Discord pour gérer plusieurs serveurs Minecraft EC2 sur AWS avec autocompl�
 - `/start [serveur]` - Démarre un serveur Minecraft
 - `/stop [serveur]` - Arrête un serveur Minecraft
 - `/status [serveur]` - Vérifie le statut d'un serveur
+- `/ip [serveur]` - Obtient l'adresse IP ou le domaine du serveur
 - `/uptime [serveur]` - Affiche l'uptime et le coût estimé du mois
 - `/list` - Liste tous les serveurs Minecraft disponibles
 
@@ -27,8 +28,10 @@ Bot Discord pour gérer plusieurs serveurs Minecraft EC2 sur AWS avec autocompl�
   - `name` : Nom affiché
   - `instance_id` : ID de l'instance EC2
   - `region` : Région AWS
-  - `hourly_cost` : Coût horaire en USD
+  - `hourly_cost` : Coût horaire en USD (optionnel)
   - `emoji` : Emoji (optionnel)
+  - `duckdns_domain` : Domaine DuckDNS (optionnel, ex: mc-survival)
+  - `minecraft_port` : Port Minecraft (optionnel, défaut: 25565)
 - `/removeserver [serveur]` - Supprime un serveur de la configuration
 
 ## 🚀 Installation
@@ -63,6 +66,8 @@ Configurez vos credentials AWS (via `aws configure` ou variables d'environnement
           "name": "Survie",
           "instance_id": "i-xxxxxxxxxxxxx",
           "region": "eu-north-1",
+          "duckdns_domain": "mc-survival.duckdns.org",
+          "minecraft_port": "25565",
           "hourly_cost": 0.0416,
           "emoji": "⛏️"
         },
@@ -70,6 +75,8 @@ Configurez vos credentials AWS (via `aws configure` ou variables d'environnement
           "name": "Créatif",
           "instance_id": "i-yyyyyyyyyyyyy",
           "region": "eu-north-1",
+          "duckdns_domain": "mc-creative",
+          "minecraft_port": "25566",
           "hourly_cost": 0.0416,
           "emoji": "🎨"
         }
@@ -90,7 +97,9 @@ Configurez vos credentials AWS (via `aws configure` ou variables d'environnement
 - **name** : Nom affiché dans Discord
 - **instance_id** : ID de l'instance EC2 AWS
 - **region** : Région AWS de l'instance
-- **hourly_cost** : Coût horaire en USD (pour le calcul des coûts)
+- **duckdns_domain** : Domaine DuckDNS pour une adresse IP fixe (optionnel)
+- **minecraft_port** : Port du serveur Minecraft (optionnel, défaut: 25565)
+- **hourly_cost** : Coût horaire en USD (optionnel, pour le calcul des coûts)
 - **emoji** : Emoji affiché à côté du nom (optionnel)
 
 ### 4. Lancement
@@ -132,6 +141,76 @@ Chaque serveur Minecraft peut être dans une région AWS différente.
 3. Il sélectionne "⛏️ Survie"
 4. Le bot démarre l'instance EC2 correspondante
 5. Un message de confirmation s'affiche : "🟢 ⛏️ Le serveur **Survie** est en cours de démarrage..."
+
+## 🌐 Configuration DuckDNS (Recommandé)
+
+### Pourquoi utiliser DuckDNS ?
+
+Lorsque vous redémarrez une instance EC2, son adresse IP publique change. DuckDNS vous permet d'avoir un domaine fixe (ex: `mc-survival.duckdns.org`) qui pointe toujours vers votre serveur, même après un redémarrage.
+
+### Configuration
+
+1. **Créez un compte sur [DuckDNS](https://www.duckdns.org/)**
+
+2. **Créez un sous-domaine** pour chaque serveur Minecraft (ex: `mc-survival`, `mc-creative`)
+
+3. **Configurez votre instance EC2** pour mettre à jour DuckDNS au démarrage :
+
+   ```bash
+   # Script à exécuter au démarrage (User Data ou crontab)
+   #!/bin/bash
+   DOMAIN="mc-survival"  # Votre sous-domaine
+   TOKEN="votre-token-duckdns"  # Votre token DuckDNS
+
+   curl -s "https://www.duckdns.org/update?domains=${DOMAIN}&token=${TOKEN}&ip="
+   ```
+
+4. **Ajoutez le domaine dans la configuration du bot** :
+
+   Via Discord :
+
+   ```
+   /addserver
+     key: survival
+     name: Survie
+     instance_id: i-xxxxxxxxxxxxx
+     region: eu-north-1
+     duckdns_domain: mc-survival.duckdns.org
+     minecraft_port: 25565
+   ```
+
+   Ou manuellement dans `servers_config.json` :
+
+   ```json
+   {
+     "survival": {
+       "name": "Survie",
+       "instance_id": "i-xxxxxxxxxxxxx",
+       "region": "eu-north-1",
+       "duckdns_domain": "mc-survival.duckdns.org",
+       "minecraft_port": "25565"
+     }
+   }
+   ```
+
+5. **Utilisez `/ip survival`** pour obtenir l'adresse du serveur !
+
+### Avantages
+
+- ✅ **Adresse fixe** : `mc-survival.duckdns.org:25565`
+- ✅ **Pas besoin de chercher l'IP** à chaque redémarrage
+- ✅ **Facile à partager** avec vos amis
+- ✅ **Gratuit** et simple à configurer
+
+### Multi-serveurs
+
+Vous pouvez avoir un domaine DuckDNS différent pour chaque serveur Minecraft :
+
+- Serveur 1 : `mc-survival.duckdns.org:25565`
+- Serveur 2 : `mc-creative.duckdns.org:25566`
+- Serveur 3 : `mc-modded.duckdns.org:25567`
+
+Chaque serveur peut avoir son propre domaine et port, même s'ils sont sur la même instance EC2 (à condition que les ports soient différents).
 
 ## 🔧 Personnalisation
 

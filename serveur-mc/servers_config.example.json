@@ -6,12 +6,16 @@
         "survival": {
           "name": "Survie",
           "instance_id": "i-XXXXXXXXXXXXXXXXX",
-          "region": "eu-north-1"
+          "region": "eu-north-1",
+          "duckdns_domain": "mc-survival.duckdns.org",
+          "minecraft_port": "25565"
         },
         "creative": {
           "name": "Créatif",
           "instance_id": "i-xxxxxxxxxxxxx",
-          "region": "eu-north-1"
+          "region": "eu-north-1",
+          "duckdns_domain": "mc-creative",
+          "minecraft_port": "25566"
         }
       }
     }
