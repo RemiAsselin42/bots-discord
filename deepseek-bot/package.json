@@ -4,7 +4,8 @@
     "discord.js": "^14.17.3",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "openai": "^4.83.0"
+    "openai": "^4.83.0",
+    "sql.js": "^1.14.1"
   },
   "name": "deepseek-discord-bot",
   "version": "1.0.0",

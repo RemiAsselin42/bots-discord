@@ -4,7 +4,7 @@ services:
     restart: always
     env_file: .env
     volumes:
-      - ./messageHistory.json:/app/messageHistory.json
+      - ./bot.db:/app/bot.db
     networks:
       - bot-network
 
