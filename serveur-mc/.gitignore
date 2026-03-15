@@ -1,10 +1,20 @@
-# Environment variables
+# ============================================
+# FICHIERS SENSIBLES ET SECRETS
+# ============================================
 .env
+*.pem
+*.ppk
 
-# Configuration avec infos sensibles
+# ============================================
+# Fichiers de configuration avec tokens/clés
+# ============================================
+config.json
+secrets.json
 servers_config.json
 
-# Python
+# ============================================
+# PYTHON
+# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -26,16 +36,29 @@ wheels/
 .installed.cfg
 *.egg
 
-# IDEs
+# ============================================
+# IDE ET ÉDITEURS
+# ============================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Logs
+# ============================================
+# LOGS
+# ============================================
 *.log
 /var/log/
 
-# Docker
+# ============================================
+# DOCKER
+# ============================================
 docker-compose.override.yml
+
+# ============================================
+# SAUVEARDES ET BACKUPS
+# ============================================
+
+backup-survie-brozers/
+backup-survie-brozers-2/

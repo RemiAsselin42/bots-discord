@@ -8,32 +8,28 @@
 *.pem
 *.key
 *.crt
+*.ppk
 
 # Fichiers de configuration avec tokens/clés
 config.json
 secrets.json
 
 # ============================================
-# NODE.JS (deepseek-bot)
+# NODE.JS
 # ============================================
-# Dépendances
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
 
 # Logs
 logs/
 *.log
 
 # ============================================
-# PYTHON (serveur-mc)
+# PYTHON
 # ============================================
-# Environnements virtuels
 venv/
 env/
 ENV/
@@ -64,32 +60,20 @@ wheels/
 # ============================================
 # FICHIERS DE DONNÉES ET HISTORIQUES
 # ============================================
-# Historique des messages et données du bot
 messageHistory.json
 allowedChannels.json
-
-# Fichiers de données générés
 *.db
 *.sqlite
 *.sqlite3
 
 # ============================================
-# DOCKER
-# ============================================
-# Fichiers Docker locaux (optionnel selon usage)
-# docker-compose.override.yml
-
-# ============================================
 # IDE ET ÉDITEURS
 # ============================================
-# Visual Studio Code
+.claude
 .vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+.github/prompts
 
-# JetBrains IDEs (PyCharm, WebStorm, etc.)
+# JetBrains IDEs
 .idea/
 *.iml
 *.iws
@@ -112,7 +96,7 @@ $RECYCLE.BIN/
 *~
 
 # ============================================
-# PM2 (gestionnaire de processus Node.js)
+# PM2
 # ============================================
 .pm2/
 pids/
@@ -134,5 +118,11 @@ coverage/
 *.temp
 *.swp
 *.swo
-*~
 .cache/
+
+# ============================================
+# BACKUPS LOURDS
+# ============================================
+backup-survie-brozers/
+backup-survie-brozers-2/
+
