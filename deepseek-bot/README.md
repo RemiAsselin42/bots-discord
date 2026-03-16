@@ -6,9 +6,10 @@ Bot Discord conversationnel basé sur l'IA de [DeepSeek](https://deepseek.com), 
 
 - **Conversation** — répond quand il est mentionné (`@bot`), avec historique des 20 derniers messages par salon
 - **Mémoire long terme** — retient des informations sur chaque utilisateur entre les sessions
+- **Index de faits utilisateur** — structure les infos (ex: surnom, ville, préférences) pour les oublier précisément
 - **Résumé automatique** — compresse les vieilles conversations en résumé pour conserver le contexte sans exploser les tokens
 - **Accès web automatique** — détecte les URLs dans les messages et injecte le contenu de la page dans le contexte
-- **Persistance SQLite** — historique, mémoire et résumés stockés dans `bot.db`
+- **Persistance SQLite** — historique, mémoire et résumés stockés dans `src/data/bot.db`
 
 ## Utilisation
 
@@ -33,12 +34,15 @@ Mentionner le bot dans un salon autorisé :
 
 ### Commandes slash
 
-| Commande          | Permission | Description                           |
-| ----------------- | ---------- | ------------------------------------- |
-| `/add-channel`    | Admin      | Autorise le salon actuel              |
-| `/remove-channel` | Admin      | Retire le salon actuel                |
-| `/list-channels`  | Admin      | Liste les salons autorisés            |
-| `/reset-history`  | Tous       | Efface l'historique + résumé du salon |
+| Commande          | Permission | Description                                                                                                      |
+| ----------------- | ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| `/forget`         | Tous       | Oublie un fait indexé précis (autocomplétion + résolution sémantique IA), nettoie les messages liés             |
+| `/memory-list`    | Tous       | Affiche les faits indexés et les notes libres mémorisées                                                         |
+| `/forget-all`     | Tous       | Efface toute ta mémoire et tes faits indexés, pose un cutoff (contexte antérieur ignoré), purge le résumé salon  |
+| `/add-channel`    | Admin      | Autorise le salon actuel                                                                                          |
+| `/remove-channel` | Admin      | Retire le salon actuel                                                                                            |
+| `/list-channels`  | Admin      | Liste les salons autorisés                                                                                        |
+| `/reset-history`  | Admin      | Efface l'historique, le résumé et les mémoires de tous les membres du serveur                                    |
 
 ## Installation
 
@@ -57,20 +61,24 @@ DISCORD_TOKEN=ton_token_discord
 DEEPSEEK_API_KEY=ta_clé_deepseek
 PORT=3000
 CUSTOM_PROMPT="Ton prompt personnalisé ici (optionnel)"
+
+# Active l'indexation automatique des faits utilisateur.
+# ATTENTION : double le nombre d'appels API DeepSeek (1 appel supplémentaire par message).
+ENABLE_AI_TOPIC_INDEXING=false
 ```
 
 ### Lancement local
 
 ```bash
 npm install
-node index.js
+npm start
 ```
 
 ### Déploiement Docker
 
 ```bash
 # Premier démarrage
-touch bot.db
+mkdir -p src/data && touch src/data/bot.db
 docker-compose up -d --build
 
 # Mise à jour après modification du code
@@ -81,19 +89,41 @@ docker-compose up -d --build
 docker-compose logs -f deepseek-bot
 ```
 
-> **Note :** `bot.db` est monté en volume pour persister la base SQLite entre les rebuilds.
+> **Note :** `src/data/bot.db` est monté en volume pour persister la base SQLite entre les rebuilds.
+
+### Déploiement PM2
+
+```bash
+# Démarrer avec PM2
+pm2 start ecosystem.config.js
+
+# Commandes de gestion
+npm run stop       # Arrêter le bot
+npm run restart    # Redémarrer et recharger les variables d'environnement
+npm run status     # Voir l'état du processus
+```
 
 ## Architecture
 
 ```
-index.js          — point d'entrée, gestion Discord, file de messages
-db.js             — couche SQLite (sql.js, pure WASM)
-webFetch.js       — fetch de pages web avec protection SSRF
-prompt.js         — prompt système du bot
-ecosystem.config.js — configuration PM2
+src/
+├── index.js              — point d'entrée, initialisation Discord et Express
+├── config.js             — variables d'environnement et constantes
+├── prompt.js             — prompt système du bot
+├── bot/
+│   ├── commands.js       — enregistrement et gestion des commandes slash
+│   ├── memory.js         — détection et écriture de mémoire en langage naturel
+│   └── queue.js          — file de traitement des messages (anti-concurrence)
+├── data/
+│   ├── db.js             — couche SQLite (sql.js, pure WASM), bot.db stocké ici
+│   └── migrate.js        — migration des anciens fichiers JSON vers SQLite
+└── services/
+    ├── ai.js             — appels API DeepSeek (réponse + indexation de faits)
+    └── webFetch.js       — fetch de pages web avec protection SSRF
+ecosystem.config.js       — configuration PM2
 ```
 
-### Base de données (`bot.db`)
+### Base de données (`src/data/bot.db`)
 
 | Table              | Contenu                                            |
 | ------------------ | -------------------------------------------------- |
@@ -101,6 +131,17 @@ ecosystem.config.js — configuration PM2
 | `message_history`  | Historique de conversation par salon (20 derniers) |
 | `channel_summary`  | Résumé compressé des vieilles conversations        |
 | `user_memory`      | Mémoire long terme par utilisateur et par guild    |
+| `user_fact_index`  | Faits utilisateur indexés (clé/valeur)             |
+
+### Index de faits utilisateur (`ENABLE_AI_TOPIC_INDEXING`)
+
+Quand activé, chaque échange déclenche un appel DeepSeek supplémentaire pour extraire et stocker les faits mentionnés par l'utilisateur (surnom, ville, préférences…) dans `user_fact_index`. Ces faits sont injectés dans le contexte de chaque réponse.
+
+> **Impact coût** : activé = 2 appels API par message (réponse + indexation). Désactiver (`ENABLE_AI_TOPIC_INDEXING=false`) si la consommation est un problème.
+
+### Oubli précis
+
+`/forget` supprime maintenant un sujet exact de l'index (ex: `surnom`, `fruit préféré`) au lieu d'une suppression texte trop large. Utilise `/memory-list` pour voir les sujets disponibles et sélectionner le bon.
 
 ### Résumé automatique
 
@@ -113,3 +154,25 @@ Les URLs `http://` et `https://` dans les messages sont détectées automatiquem
 ## Sécurité web (anti-SSRF)
 
 Les adresses suivantes sont bloquées : `localhost`, `127.x`, `10.x`, `192.168.x`, `172.16-31.x`, link-local, IPv6 privées. Seuls les protocoles `http` et `https` sont acceptés.
+
+## Qualité & Validation
+
+Pour garantir la robustesse, la confidentialité et la maintenabilité du bot, des scripts de validation sont disponibles :
+
+### Lint (ESLint)
+
+Analyse statique du code pour détecter les erreurs, incohérences et mauvaises pratiques.
+
+```bash
+npm run lint
+```
+
+### Tests (Node.js)
+
+Exécute les tests unitaires et d’intégration (notamment sur la mémoire et la confidentialité).
+
+```bash
+npm test
+```
+
+> **Astuce :** Exécutez ces deux commandes avant chaque commit ou déploiement pour garantir la qualité et la conformité du code.
