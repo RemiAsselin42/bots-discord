@@ -14,7 +14,7 @@ const PRIVATE_IP_PATTERNS = [
     /^169\.254\./, // link-local
     /^::1$/,
     /^fc[0-9a-f]{2}:/i, // IPv6 ULA
-    /^fe80:/i,           // IPv6 link-local
+    /^fe80:/i,          // IPv6 link-local
 ];
 
 function isPrivateAddress(hostname) {
