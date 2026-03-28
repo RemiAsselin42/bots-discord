@@ -2,110 +2,85 @@
 
 Bot Discord pour gérer plusieurs serveurs Minecraft EC2 sur AWS avec autocomplétion par serveur Discord.
 
-## ✨ Fonctionnalités
+## Fonctionnalités
 
-- ✅ **Multi-serveurs** : Gérez jusqu'à 5 serveurs Minecraft par serveur Discord
-- ✅ **Autocomplétion intelligente** : Chaque serveur Discord ne voit que ses propres serveurs Minecraft
-- ✅ **Gestion AWS EC2** : Démarrage, arrêt, statut des instances
-- ✅ **Suivi des coûts** : Calcul automatique de l'uptime et du coût mensuel
-- ✅ **Multi-régions** : Supporte des serveurs dans différentes régions AWS
+- **Multi-serveurs** : Gérez plusieurs serveurs Minecraft par serveur Discord
+- **Autocomplétion intelligente** : Chaque serveur Discord ne voit que ses propres serveurs Minecraft
+- **Gestion AWS EC2** : Démarrage, arrêt, statut des instances
+- **Notification de démarrage** : Le bot notifie dans le canal Discord dès que l'instance est prête
+- **Auto-stop** : Arrêt automatique des serveurs inactifs (aucun joueur connecté depuis N minutes)
+- **Statut des joueurs** : Interrogation directe du serveur Minecraft via `mcstatus`
+- **Suivi des coûts** : Calcul automatique de l'uptime et du coût estimé
+- **Multi-régions** : Supporte des serveurs dans différentes régions AWS
+- **Gestion des permissions** : Contrôle fin par rôle Discord sur les commandes `/start` et `/stop`
+- **Setup SSH automatique** : Création de la structure d'un serveur Minecraft sur l'instance EC2 via `/createserver`
 
-## 📋 Commandes disponibles
+## Commandes disponibles
 
 ### Gestion des serveurs
 
-- `/start [serveur]` - Démarre un serveur Minecraft
-- `/stop [serveur]` - Arrête un serveur Minecraft
-- `/status [serveur]` - Vérifie le statut d'un serveur
-- `/ip [serveur]` - Obtient l'adresse IP ou le domaine du serveur
-- `/uptime [serveur]` - Affiche l'uptime et le coût estimé du mois
-- `/list` - Liste tous les serveurs Minecraft disponibles
+- `/start [serveur]` — Démarre un serveur Minecraft (notifie quand prêt)
+- `/stop [serveur]` — Arrête un serveur Minecraft
+- `/status [serveur]` — Vérifie le statut EC2 d'un serveur
+- `/ip [serveur]` — Obtient l'adresse IP ou le domaine du serveur
+- `/uptime [serveur]` — Affiche l'uptime et le coût estimé
+- `/list` — Liste tous les serveurs Minecraft disponibles
+- `/players [serveur]` — Affiche les joueurs connectés (ping Minecraft direct)
+- `/cost [serveur]` — Affiche le coût détaillé depuis le dernier démarrage
 
 ### Administration (Administrateurs uniquement)
 
-- `/addserver` - Ajoute un nouveau serveur à la configuration
-  - `key` : Identifiant unique (ex: survival, creative)
+- `/createserver` — Crée un nouveau serveur avec attribution automatique de port et setup SSH
   - `name` : Nom affiché
-  - `instance_id` : ID de l'instance EC2
-  - `region` : Région AWS
-  - `hourly_cost` : Coût horaire en USD (optionnel)
-  - `emoji` : Emoji (optionnel)
-  - `duckdns_domain` : Domaine DuckDNS (optionnel, ex: mc-survival)
-  - `minecraft_port` : Port Minecraft (optionnel, défaut: 25565)
-- `/removeserver [serveur]` - Supprime un serveur de la configuration
+  - `instance_id` : ID de l'instance EC2 (ex: `i-0123456789abcdef0`)
+  - `ram` : RAM allouée (ex: `2G`, `1.5G`, `512M` — défaut: `1.5G`)
+  - `duckdns_domain` : Domaine DuckDNS (optionnel)
+- `/removeserver [serveur]` — Supprime un serveur de la configuration
+- `/editserver [serveur]` — Modifie la configuration d'un serveur existant
+  - `name`, `instance_id`, `region`, `duckdns_domain`, `hourly_cost` (tous optionnels)
+- `/setchannel [canal]` — Définit le canal de notifications (auto-stop, etc.)
+- `/setpermission [commande] [rôle]` — Autorise un rôle Discord à utiliser `/start` ou `/stop`
+- `/resetpermission [commande]` — Remet les permissions d'une commande aux valeurs par défaut
+- `/listpermissions` — Affiche les permissions configurées pour ce serveur Discord
 
-## 🚀 Installation
+## Installation
 
 ### 1. Prérequis
 
 ```bash
-pip install discord.py boto3 python-dotenv
+pip install -r requirements.txt
 ```
 
-### 2. Configuration AWS
+Dépendances principales : `discord.py`, `boto3`, `python-dotenv`, `mcstatus`, `paramiko`.
 
-Créez un fichier `.env` :
+### 2. Configuration de l'environnement
+
+Copiez `.env.example` en `.env` et renseignez les valeurs :
 
 ```env
+# Token du bot Discord
 DISCORD_TOKEN=votre_token_discord
+
+# DuckDNS (utilisé par duck.sh sur l'instance EC2)
+DUCKDNS_DOMAIN=
+DUCKDNS_TOKEN=
+
+# SSH : pour le setup automatique via /createserver
+# MC_SERVER_HOST=ec2-xx-xx-xx-xx.eu-north-1.compute.amazonaws.com
+# MC_SERVER_USER=ec2-user
+# MC_SERVER_KEY_PATH=/keys/server-mc.pem
+
+# AWS : à renseigner uniquement en dehors d'une instance EC2
+# AWS_ACCESS_KEY_ID=
+# AWS_SECRET_ACCESS_KEY=
 ```
 
-Configurez vos credentials AWS (via `aws configure` ou variables d'environnement).
+> Si le bot tourne sur une instance EC2 avec un IAM Role, boto3 récupère les credentials AWS automatiquement — ne pas renseigner `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
 
-### 3. Configuration des serveurs
-
-Éditez le fichier `servers_config.json` :
-
-```json
-{
-  "guilds": {
-    "VOTRE_GUILD_ID_DISCORD": {
-      "name": "Nom de votre serveur Discord",
-      "servers": {
-        "survival": {
-          "name": "Survie",
-          "instance_id": "i-xxxxxxxxxxxxx",
-          "region": "eu-north-1",
-          "duckdns_domain": "mc-survival.duckdns.org",
-          "minecraft_port": "25565",
-          "hourly_cost": 0.0416,
-          "emoji": "⛏️"
-        },
-        "creative": {
-          "name": "Créatif",
-          "instance_id": "i-yyyyyyyyyyyyy",
-          "region": "eu-north-1",
-          "duckdns_domain": "mc-creative",
-          "minecraft_port": "25566",
-          "hourly_cost": 0.0416,
-          "emoji": "🎨"
-        }
-      }
-    }
-  }
-}
-```
-
-#### Comment obtenir votre Guild ID Discord ?
-
-1. Activez le "Mode développeur" dans Discord (Paramètres > Avancés > Mode développeur)
-2. Faites un clic droit sur votre serveur Discord
-3. Cliquez sur "Copier l'identifiant du serveur"
-
-#### Paramètres des serveurs :
-
-- **name** : Nom affiché dans Discord
-- **instance_id** : ID de l'instance EC2 AWS
-- **region** : Région AWS de l'instance
-- **duckdns_domain** : Domaine DuckDNS pour une adresse IP fixe (optionnel)
-- **minecraft_port** : Port du serveur Minecraft (optionnel, défaut: 25565)
-- **hourly_cost** : Coût horaire en USD (optionnel, pour le calcul des coûts)
-- **emoji** : Emoji affiché à côté du nom (optionnel)
-
-### 4. Lancement
+### 3. Lancement
 
 ```bash
-python minecraft-bot.py
+python main.py
 ```
 
 Ou avec Docker :
@@ -114,7 +89,41 @@ Ou avec Docker :
 docker-compose up -d
 ```
 
-## 🏗️ Architecture
+> `servers_config.json` est créé automatiquement au premier démarrage. Configurez ensuite vos serveurs directement depuis Discord avec `/createserver`, `/setchannel`, etc.
+
+## Architecture
+
+```
+serveur-mc/
+├── main.py                  # Point d'entrée : initialisation du bot et enregistrement des commandes
+├── bot/
+│   ├── commands/
+│   │   ├── control.py       # /start, /stop, /status
+│   │   ├── info.py          # /list, /ip, /uptime
+│   │   ├── stats.py         # /cost, /players
+│   │   └── admin.py         # /createserver, /removeserver, /editserver, /setchannel, permissions
+│   ├── tasks.py             # Tâches asyncio : notify_server_ready, auto_stop_loop
+│   ├── aws.py               # Client EC2 boto3
+│   ├── config.py            # Chargement/sauvegarde de servers_config.json
+│   ├── permissions.py       # Vérification des permissions par rôle
+│   ├── ssh.py               # Setup SSH des instances EC2 (paramiko)
+│   ├── autocomplete.py      # Autocomplétion Discord par guild
+│   ├── port_manager.py      # Attribution automatique de ports
+│   └── helpers.py           # Utilitaires (slugify, etc.)
+├── scripts/                 # Scripts utilitaires pour l'instance EC2
+│   ├── duck.sh              # Mise à jour DuckDNS
+│   ├── check_idle.sh        # Vérification d'inactivité
+│   ├── check_players.sh     # Comptage des joueurs
+│   └── stop_minecraft.sh    # Arrêt du serveur Minecraft
+├── tests/
+│   ├── test_core.py
+│   └── test_tasks.py
+├── servers_config.json      # Configuration des guilds et serveurs (auto-créé au démarrage)
+├── .env                     # Variables d'environnement (à créer)
+├── .env.example
+├── Dockerfile
+└── docker-compose.yaml
+```
 
 ### Isolation par serveur Discord
 
@@ -127,126 +136,57 @@ Chaque serveur Discord (guild) a sa propre configuration de serveurs Minecraft. 
 
 ### Gestion AWS
 
-Le bot utilise Boto3 pour interagir avec AWS EC2 et CloudWatch :
+Le bot utilise boto3 pour interagir avec AWS EC2 :
 
-- **EC2** : Démarrage/arrêt des instances
-- **CloudWatch** : Collecte des métriques d'uptime
+- **EC2** : Démarrage, arrêt, statut des instances, récupération de l'IP publique
+- Chaque serveur Minecraft peut être dans une région AWS différente
 
-Chaque serveur Minecraft peut être dans une région AWS différente.
+> Sur une instance EC2 avec IAM Role, aucune clé AWS n'est nécessaire dans l'environnement.
 
-## 📝 Exemple d'utilisation
+### Auto-stop
 
-1. Un utilisateur tape `/start` dans Discord
-2. L'autocomplétion affiche uniquement les serveurs de son serveur Discord
-3. Il sélectionne "⛏️ Survie"
-4. Le bot démarre l'instance EC2 correspondante
-5. Un message de confirmation s'affiche : "🟢 ⛏️ Le serveur **Survie** est en cours de démarrage..."
+La boucle `auto_stop_loop` s'exécute toutes les 5 minutes. Pour chaque serveur en état `running`, elle pinge le serveur Minecraft via `mcstatus`. Si aucun joueur n'est connecté depuis `idle_timeout_minutes`, l'instance EC2 est arrêtée et une notification est envoyée dans le canal configuré via `/setchannel`.
 
-## 🌐 Configuration DuckDNS (Recommandé)
+### Setup SSH automatique (`/createserver`)
 
-### Pourquoi utiliser DuckDNS ?
+La commande `/createserver` :
 
-Lorsque vous redémarrez une instance EC2, son adresse IP publique change. DuckDNS vous permet d'avoir un domaine fixe (ex: `mc-survival.duckdns.org`) qui pointe toujours vers votre serveur, même après un redémarrage.
+1. Attribue automatiquement un port disponible
+2. Enregistre la configuration dans `servers_config.json`
+3. Se connecte en SSH à l'instance EC2 (`paramiko`) pour créer la structure du serveur :
+   - Dossier `~/minecraft-servers/<key>`
+   - Téléchargement de `server.jar`
+   - Génération de `eula.txt` et `server.properties`
 
-### Configuration
+Variables d'environnement requises pour le SSH : `MC_SERVER_HOST`, `MC_SERVER_KEY_PATH` (et optionnellement `MC_SERVER_USER`, `MC_SERVER_JAR_URL`).
 
-1. **Créez un compte sur [DuckDNS](https://www.duckdns.org/)**
+## Configuration DuckDNS
 
-2. **Créez un sous-domaine** pour chaque serveur Minecraft (ex: `mc-survival`, `mc-creative`)
+Lorsqu'une instance EC2 redémarre, son adresse IP publique change. DuckDNS permet d'avoir un domaine fixe (ex: `mc-survival.duckdns.org`) qui pointe toujours vers votre serveur.
 
-3. **Configurez votre instance EC2** pour mettre à jour DuckDNS au démarrage :
+### Mise à jour automatique de l'IP
 
-   ```bash
-   # Script à exécuter au démarrage (User Data ou crontab)
-   #!/bin/bash
-   DOMAIN="mc-survival"  # Votre sous-domaine
-   TOKEN="votre-token-duckdns"  # Votre token DuckDNS
+Le script `scripts/duck.sh` est à exécuter sur l'instance EC2 (crontab ou User Data). Il lit les variables d'environnement `DUCKDNS_DOMAIN` et `DUCKDNS_TOKEN` :
 
-   curl -s "https://www.duckdns.org/update?domains=${DOMAIN}&token=${TOKEN}&ip="
-   ```
+```bash
+# Exemple crontab (toutes les 5 minutes)
+*/5 * * * * DUCKDNS_DOMAIN=mc-survival DUCKDNS_TOKEN=votre-token /path/to/duck.sh
+```
 
-4. **Ajoutez le domaine dans la configuration du bot** :
+### Configuration du domaine dans le bot
 
-   Via Discord :
-
-   ```
-   /addserver
-     key: survival
-     name: Survie
-     instance_id: i-xxxxxxxxxxxxx
-     region: eu-north-1
-     duckdns_domain: mc-survival.duckdns.org
-     minecraft_port: 25565
-   ```
-
-   Ou manuellement dans `servers_config.json` :
-
-   ```json
-   {
-     "survival": {
-       "name": "Survie",
-       "instance_id": "i-xxxxxxxxxxxxx",
-       "region": "eu-north-1",
-       "duckdns_domain": "mc-survival.duckdns.org",
-       "minecraft_port": "25565"
-     }
-   }
-   ```
-
-5. **Utilisez `/ip survival`** pour obtenir l'adresse du serveur !
-
-### Avantages
-
-- ✅ **Adresse fixe** : `mc-survival.duckdns.org:25565`
-- ✅ **Pas besoin de chercher l'IP** à chaque redémarrage
-- ✅ **Facile à partager** avec vos amis
-- ✅ **Gratuit** et simple à configurer
-
-### Multi-serveurs
-
-Vous pouvez avoir un domaine DuckDNS différent pour chaque serveur Minecraft :
-
-- Serveur 1 : `mc-survival.duckdns.org:25565`
-- Serveur 2 : `mc-creative.duckdns.org:25566`
-- Serveur 3 : `mc-modded.duckdns.org:25567`
-
-Chaque serveur peut avoir son propre domaine et port, même s'ils sont sur la même instance EC2 (à condition que les ports soient différents).
-
-## 🔧 Personnalisation
-
-### Ajouter un nouveau serveur Minecraft
-
-**Méthode 1 : Via Discord (Recommandée)**
-
-Utilisez la commande `/addserver` directement dans Discord :
+Via Discord :
 
 ```
-/addserver
-  key: survival
+/createserver
   name: Survie
   instance_id: i-0123456789abcdef0
-  region: eu-north-1
-  hourly_cost: 0.0416
-  emoji: ⛏️
+  duckdns_domain: mc-survival.duckdns.org
 ```
 
-Le serveur est ajouté instantanément, pas besoin de redémarrer le bot !
+Utilisez `/ip survival` pour obtenir l'adresse du serveur.
 
-**Méthode 2 : Manuellement via JSON**
-
-1. Créez une nouvelle instance EC2 sur AWS
-2. Ajoutez une entrée dans `servers_config.json` sous la guild appropriée
-3. Redémarrez le bot
-
-### Ajouter un nouveau serveur Discord
-
-1. Invitez le bot sur le nouveau serveur Discord
-2. Récupérez le Guild ID
-3. Ajoutez une nouvelle section dans `servers_config.json`
-
-## 🐳 Docker
-
-Le bot est conteneurisé avec Docker pour un déploiement facile.
+## Docker
 
 ```yaml
 services:
@@ -255,25 +195,28 @@ services:
     container_name: my-mc-bot
     env_file: .env
     restart: unless-stopped
+    volumes:
+      - .:/app
+      - ../keys/mc-host.pem:/keys/mc-host.pem:ro
+    working_dir: /app
+    command: python -u main.py
 ```
 
-## 📊 Permissions Discord requises
+La clé SSH pour le setup des instances EC2 est montée en lecture seule depuis `../keys/mc-host.pem`.
+
+## Permissions Discord requises
 
 Le bot nécessite les permissions suivantes :
 
 - `applications.commands` (pour les slash commands)
 - `Send Messages` (pour envoyer des réponses)
 
-## ⚠️ Sécurité
+## Sécurité
 
 - Ne partagez jamais votre fichier `.env`
-- Utilisez des rôles IAM AWS avec permissions minimales
-- Considérez l'utilisation de AWS Secrets Manager pour les credentials sensibles
+- Utilisez des rôles IAM AWS avec permissions minimales (EC2: `StartInstances`, `StopInstances`, `DescribeInstances`, `DescribeInstanceStatus`)
+- La clé SSH PEM ne doit pas être commitée — elle est montée via un volume Docker
 
-## 🤝 Support
-
-Pour toute question ou problème, référez-vous aux logs du bot.
-
-## 📄 Licence
+## Licence
 
 MIT
