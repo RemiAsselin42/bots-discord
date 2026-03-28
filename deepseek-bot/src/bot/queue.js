@@ -16,8 +16,12 @@ const {
 const messageQueue = [];
 let isProcessingQueue = false;
 let currentMessageId = null;
-let typingInterval = null;
 let currentController = null;
+
+// ─── Cooldown par utilisateur ─────────────────────────────────────────────────
+// Durée minimale (en ms) entre deux requêtes d'un même utilisateur.
+const USER_COOLDOWN_MS = 10_000;
+const userLastRequest = new Map(); // userId -> timestamp (ms)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -136,14 +140,16 @@ async function processMessage(message) {
     // Construction du contexte
     const channelHistory = db.getChannelHistory(channelId);
     const forgetCutoff = db.getUserForgetCutoff(userId, guildId);
-    const historyUserIds = [...new Set(channelHistory.map((e) => e.user_id).filter(Boolean))];
-    const forgetCutoffMap = db.getUserForgetCutoffMap(historyUserIds, guildId);
     const botUserId = botUser.id;
+    // Exclure le bot de la map : ses messages sont filtrés séparément via le cutoff de l'utilisateur courant (voir ci-dessous)
+    const historyUserIds = [...new Set(channelHistory.map((e) => e.user_id).filter((id) => Boolean(id) && id !== botUserId))];
+    const forgetCutoffMap = db.getUserForgetCutoffMap(historyUserIds, guildId);
     const filteredHistory = channelHistory.filter((entry) => {
         const createdAt = Number(entry.created_at || 0);
         if (entry.user_id && forgetCutoffMap[entry.user_id]) return createdAt > forgetCutoffMap[entry.user_id];
         if (!entry.user_id && forgetCutoff && entry.username === userName) return createdAt > forgetCutoff;
-        // Filtrer aussi les messages du bot antérieurs au cutoff de l'utilisateur courant
+        // Les messages du bot sont liés au contexte de l'utilisateur courant : on les coupe au même seuil pour éviter
+        // qu'il réponde à des échanges que l'utilisateur a demandé à oublier.
         if (forgetCutoff && entry.user_id === botUserId) return createdAt > forgetCutoff;
         return true;
     });
@@ -158,7 +164,7 @@ async function processMessage(message) {
         webSection,
     });
 
-    console.log("Question de l'utilisateur:", context);
+    if (process.env.DEBUG) console.log("Question de l'utilisateur:", context);
 
     const response = await callDeepSeek(
         [
@@ -208,6 +214,17 @@ async function processQueue() {
 
         if (!message.mentions.has(message.client.user)) continue;
 
+        // Vérification du cooldown par utilisateur
+        const now = Date.now();
+        const lastRequest = userLastRequest.get(userId) || 0;
+        const elapsed = now - lastRequest;
+        if (elapsed < USER_COOLDOWN_MS) {
+            const remaining = Math.ceil((USER_COOLDOWN_MS - elapsed) / 1000);
+            await message.reply(`⏳ Merci de patienter encore **${remaining}s** avant d'envoyer une nouvelle requête.`);
+            continue;
+        }
+        userLastRequest.set(userId, now);
+
         currentController = new AbortController();
 
         try {
@@ -216,7 +233,6 @@ async function processQueue() {
         } catch (error) {
             if (error.code === "ECONNRESET") {
                 console.error("Connexion interrompue par le serveur.");
-                clearInterval(typingInterval);
                 message.retryCount = (message.retryCount || 0) + 1;
                 if (message.retryCount < 3) {
                     messageQueue.unshift(message);
@@ -231,7 +247,6 @@ async function processQueue() {
             console.error("Erreur lors de la requête à l'API DeepSeek:", error);
             break;
         }
-        clearInterval(typingInterval);
     }
 
     isProcessingQueue = false;
@@ -255,7 +270,6 @@ function handleMessageUpdate(oldMessage, newMessage) {
     if (isProcessingQueue && oldMessage.id === currentMessageId) {
         console.log("Le message en cours de traitement a été mis à jour. Annulation de la requête.");
         currentController.abort();
-        clearInterval(typingInterval);
         isProcessingQueue = false;
         messageQueue.unshift(newMessage);
         processQueue();
@@ -269,7 +283,6 @@ function handleMessageDelete(deletedMessage) {
     if (isProcessingQueue && deletedMessage.id === currentMessageId) {
         console.log("Le message en cours de traitement a été supprimé. Annulation.");
         currentController.abort();
-        clearInterval(typingInterval);
         isProcessingQueue = false;
     }
 }

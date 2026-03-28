@@ -66,7 +66,7 @@ async function ensurePublicHost(hostname) {
         throw new Error("Impossible de résoudre le domaine");
     }
 
-    if (!records || records.length === 0) {
+    if (records.length === 0) {
         throw new Error("Aucune résolution DNS disponible");
     }
 
