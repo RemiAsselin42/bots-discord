@@ -7,6 +7,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 from bot.commands import admin, control, info, stats
+from bot.ssh import setup_host_instance
 from bot.tasks import auto_stop_loop
 
 logging.basicConfig(
@@ -30,6 +31,18 @@ admin.setup(tree)
 stats.setup(tree)
 
 
+async def _setup_host() -> None:
+    """Lance le setup de l'instance Minecraft Host en arrière-plan au démarrage."""
+    if not os.getenv("MC_SERVER_HOST"):
+        return
+    logger.info("[setup_host] Démarrage du setup de l'instance Minecraft Host...")
+    success, msg = await asyncio.to_thread(setup_host_instance)
+    if success:
+        logger.info("[setup_host] %s", msg)
+    else:
+        logger.error("[setup_host] %s", msg)
+
+
 @bot.event
 async def on_ready():
     logger.info("Bot en cours de connexion...")
@@ -38,6 +51,7 @@ async def on_ready():
         logger.info("Bot connecté: %s", bot.user)
         logger.info("Commandes synchronisées: %d", len(synced))
         asyncio.create_task(auto_stop_loop(bot))
+        asyncio.create_task(_setup_host())
     except Exception as e:
         logger.error("Erreur synchronisation: %s", e)
 

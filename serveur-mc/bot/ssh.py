@@ -81,6 +81,88 @@ def generate_rcon_password(length: int = 24) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
+def setup_host_instance(
+    *,
+    host: str | None = None,
+    user: str | None = None,
+    key_path: str | None = None,
+) -> tuple[bool, str]:
+    """
+    Prépare l'instance EC2 Minecraft Host pour recevoir des serveurs :
+    - Installe Java 21 si absent
+    - Crée ~/minecraft-servers/
+    - Uploade les scripts (duck.sh, stop_minecraft.sh, check_idle.sh, check_players.sh)
+    - Configure les permissions et le crontab DuckDNS
+    - Injecte DUCKDNS_DOMAIN et DUCKDNS_TOKEN dans ~/.bashrc
+
+    Idempotent : sans danger si appelé plusieurs fois.
+
+    Returns:
+        (success, message)
+    """
+    _host = host or MC_SERVER_HOST
+    _user = user or MC_SERVER_USER
+    _key_path = key_path or MC_SERVER_KEY_PATH
+
+    if not _host or not _key_path:
+        return (False, "Variables MC_SERVER_HOST et MC_SERVER_KEY_PATH requises.")
+
+    # 1. Installer Java 21 et créer le répertoire de base
+    install_cmd = f"""
+set -e
+if ! java -version 2>&1 | grep -q '21'; then
+    sudo dnf install -y java-21-amazon-corretto-headless
+fi
+mkdir -p /home/{_user}/minecraft-servers
+"""
+    success, output = ssh_execute(_host, _user, _key_path, install_cmd)
+    if not success:
+        return (False, f"Erreur installation Java/répertoire:\n{output}")
+
+    # 2. Uploader les scripts via SFTP
+    scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts"))
+    script_names = ["duck.sh", "stop_minecraft.sh", "check_idle.sh", "check_players.sh"]
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        key = load_ssh_key(_key_path)
+        ssh.connect(hostname=_host, username=_user, pkey=key, timeout=30)
+        sftp = ssh.open_sftp()
+        for name in script_names:
+            local_path = os.path.join(scripts_dir, name)
+            sftp.put(local_path, f"/home/{_user}/{name}")
+        sftp.close()
+    except Exception as e:
+        return (False, f"Erreur upload scripts:\n{e}")
+    finally:
+        ssh.close()
+
+    # 3. Permissions + crontab + variables DuckDNS dans ~/.bashrc
+    duckdns_domain = os.getenv("DUCKDNS_DOMAIN", "")
+    duckdns_token = os.getenv("DUCKDNS_TOKEN", "")
+    bashrc_cmds = ""
+    if duckdns_domain and duckdns_token:
+        bashrc_cmds = (
+            f"grep -qF 'DUCKDNS_DOMAIN' ~/.bashrc || "
+            f"echo 'export DUCKDNS_DOMAIN={duckdns_domain}' >> ~/.bashrc\n"
+            f"grep -qF 'DUCKDNS_TOKEN' ~/.bashrc || "
+            f"echo 'export DUCKDNS_TOKEN={duckdns_token}' >> ~/.bashrc"
+        )
+
+    post_cmd = f"""
+set -e
+chmod +x /home/{_user}/duck.sh /home/{_user}/stop_minecraft.sh /home/{_user}/check_idle.sh /home/{_user}/check_players.sh
+crontab -l 2>/dev/null | grep -q duck.sh || (crontab -l 2>/dev/null; echo "*/5 * * * * /home/{_user}/duck.sh >> /home/{_user}/duck.log 2>&1") | crontab -
+{bashrc_cmds}
+"""
+    success, output = ssh_execute(_host, _user, _key_path, post_cmd)
+    if not success:
+        return (False, f"Erreur configuration post-upload:\n{output}")
+
+    return (True, "Setup de l'instance Minecraft Host terminé avec succès.")
+
+
 def setup_minecraft_server(
     server_key: str,
     port: int,
