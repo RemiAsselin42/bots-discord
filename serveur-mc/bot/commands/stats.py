@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from mcstatus import JavaServer
-from mcstatus.status_response import JavaStatusResponse
+from mcstatus.responses import JavaStatusResponse
 
 from bot.autocomplete import server_autocomplete
 from bot.aws import format_boto_error, get_ec2_client
