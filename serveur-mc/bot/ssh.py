@@ -24,7 +24,6 @@ _KEY_TYPES = [
     paramiko.RSAKey,
     paramiko.Ed25519Key,
     paramiko.ECDSAKey,
-    paramiko.DSSKey,
 ]
 
 
