@@ -3,14 +3,10 @@ services:
     build: .
     container_name: my-mc-bot
     env_file: .env
-    environment:
-      # Utilisé par boto3 pour sélectionner le profil des fichiers ~/.aws
-      - AWS_PROFILE=default
     restart: unless-stopped
     volumes:
       - .:/app
-      # Monte les credentials AWS de l'hôte dans le conteneur (en lecture seule)
-      - /home/ec2-user/.aws:/root/.aws:ro
+      - ../keys/mc-host.pem:/keys/mc-host.pem:ro
     working_dir: /app
     # -u pour des logs non bufferisés
-    command: python -u minecraft-bot.py
+    command: python -u main.py

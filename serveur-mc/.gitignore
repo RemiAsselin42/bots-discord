@@ -57,8 +57,24 @@ wheels/
 docker-compose.override.yml
 
 # ============================================
-# SAUVEARDES ET BACKUPS
+# SAUVEGARDES ET BACKUPS
 # ============================================
+backup-*/
 
-backup-survie-brozers/
-backup-survie-brozers-2/
+# ============================================
+# ARTEFACTS ET BINAIRES
+# ============================================
+*.jar
+*.tgz
+*.tar.gz
+*.zip
+
+# Artefact pip (ex: =11.0.0 créé par pip install pkg>=version)
+=*
+
+# ============================================
+# CACHE OUTILS
+# ============================================
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
