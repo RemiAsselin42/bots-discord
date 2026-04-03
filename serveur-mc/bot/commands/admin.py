@@ -96,10 +96,9 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         confirm = (
-            f":white_check_mark: Serveur **{name}** (`{key}`) enregistré avec succès !\n\n"
+            f":white_check_mark: Serveur **{name}** enregistré avec succès !\n\n"
             f":clipboard: **Configuration :**\n"
-            f"• Instance: `{instance_id}`\n"
-            f"• Région: `{region}`\n"
+            f"• Nom: `{name}`\n"
             f"• Port Minecraft: `{port}`\n"
             f"• RAM: `{ram_upper}`\n"
             f"• Version: `{version}`\n\n"
@@ -152,13 +151,11 @@ def setup(tree: app_commands.CommandTree) -> None:
         if port and instance_id:
             try:
                 await asyncio.to_thread(manage_sg_port, instance_id, region, port, "revoke")
-                sg_info = f"\n:lock: Port `{port}` fermé dans le Security Group."
+                sg_info = ""
             except Exception as e:
                 sg_info = f"\n:warning: Port `{port}` non fermé dans le Security Group : {format_boto_error(e, action='révoquer le port', instance_id=instance_id, region=region)}"
-
-        port_info = f"\n:unlock: Port `{port}` libéré." if port else ""
         await interaction.response.send_message(
-            f":white_check_mark: Serveur **{name}** (`{server}`) supprimé avec succès.{port_info}{sg_info}"
+            f":white_check_mark: Serveur **{name}** (`{server}`) supprimé avec succès.{sg_info}"
         )
 
     @tree.command(name="editserver", description="Modifie la configuration d'un serveur existant")

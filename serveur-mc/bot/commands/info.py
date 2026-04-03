@@ -52,7 +52,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         if duckdns_domain:
             full_domain = duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"
             await interaction.response.send_message(
-                f":globe_with_meridians: **Adresse du serveur {name} :**\n\n```{full_domain}:{minecraft_port}```"
+                f":globe_with_meridians: Adresse du serveur **{name}** :\n\n```{full_domain}:{minecraft_port}```"
             )
             return
 
