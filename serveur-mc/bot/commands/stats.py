@@ -83,7 +83,8 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         name = server_config.get("name", server)
         port = int(server_config.get("minecraft_port", "25565"))
-        duckdns_domain: str | None = server_config.get("duckdns_domain")
+        import os
+        duckdns_domain: str | None = os.getenv("DUCKDNS_DOMAIN")
 
         await interaction.response.defer()
 

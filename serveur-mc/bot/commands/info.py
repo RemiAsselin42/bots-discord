@@ -44,9 +44,10 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
+        import os
         name = server_config.get("name", server)
         minecraft_port = server_config.get("minecraft_port", "25565")
-        duckdns_domain = server_config.get("duckdns_domain")
+        duckdns_domain = os.getenv("DUCKDNS_DOMAIN")
 
         if duckdns_domain:
             full_domain = duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"

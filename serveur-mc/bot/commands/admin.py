@@ -20,7 +20,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         instance_id="ID de l'instance EC2 AWS (ex: i-xxxxxxxxxxxxx)",
         ram="RAM allouée au serveur (ex: 2G, 1.5G, 512M)",
         region="Région AWS de l'instance (ex: eu-north-1, eu-west-3, us-east-1)",
-        duckdns_domain="(Optionnel) Domaine DuckDNS (ex: mc-rgl ou mc-rgl.duckdns.org)",
     )
     async def createserver_command(
         interaction: discord.Interaction,
@@ -28,7 +27,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         instance_id: str,
         ram: str = "1.5G",
         region: str = "eu-north-1",
-        duckdns_domain: str | None = None,
     ):
         if not interaction.guild:
             await interaction.response.send_message(
@@ -84,9 +82,6 @@ def setup(tree: app_commands.CommandTree) -> None:
             "max_ram": ram_upper,
             "min_ram": "1G",
         }
-        if duckdns_domain:
-            server_data["duckdns_domain"] = duckdns_domain
-
         config["guilds"][guild_str]["servers"][key] = server_data
 
         try:
@@ -107,7 +102,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         await interaction.response.send_message(confirm)
 
         # Setup SSH en arrière-plan
-        asyncio.create_task(_run_ssh_setup(interaction, key, port, name, duckdns_domain))
+        asyncio.create_task(_run_ssh_setup(interaction, key, port, name))
 
     @tree.command(name="removeserver", description="Supprime un serveur Minecraft de la configuration")
     @app_commands.describe(server="Sélectionnez le serveur à supprimer")
@@ -154,7 +149,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         name="Nouveau nom affiché",
         instance_id="Nouvel ID d'instance EC2",
         region="Nouvelle région AWS",
-        duckdns_domain="Nouveau domaine DuckDNS (ou 'none' pour supprimer)",
         hourly_cost="Nouveau coût horaire en $",
     )
     @app_commands.autocomplete(server=server_autocomplete)
@@ -164,7 +158,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         name: str | None = None,
         instance_id: str | None = None,
         region: str | None = None,
-        duckdns_domain: str | None = None,
         hourly_cost: float | None = None,
     ):
         if not interaction.guild:
@@ -209,13 +202,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         if hourly_cost is not None:
             server_data["hourly_cost"] = hourly_cost
             changes.append(f"• Coût horaire: `${hourly_cost:.4f}`")
-        if duckdns_domain is not None:
-            if duckdns_domain.lower() == "none":
-                server_data.pop("duckdns_domain", None)
-                changes.append("• Domaine DuckDNS: supprimé")
-            else:
-                server_data["duckdns_domain"] = duckdns_domain
-                changes.append(f"• Domaine DuckDNS: `{duckdns_domain}`")
 
         if not changes:
             await interaction.response.send_message(
@@ -372,12 +358,13 @@ async def _run_ssh_setup(
     server_key: str,
     port: int,
     name: str,
-    duckdns_domain: str | None,
 ) -> None:
     """Lance le setup SSH et envoie un follow-up dans le canal."""
     success, message = ssh_helper.setup_minecraft_server(server_key, port)
 
     if success:
+        import os
+        duckdns_domain = os.getenv("DUCKDNS_DOMAIN")
         extra = ""
         if duckdns_domain:
             full_domain = duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"

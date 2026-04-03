@@ -173,7 +173,8 @@ async def _check_and_stop_if_idle(
 
 def _resolve_mc_host(server_config: dict, ec2_client) -> str | None:
     """Retourne l'adresse MC à pinguer (DuckDNS prioritaire, sinon IP publique EC2)."""
-    duckdns = server_config.get("duckdns_domain")
+    import os
+    duckdns = os.getenv("DUCKDNS_DOMAIN")
     if duckdns:
         return duckdns if "." in duckdns else f"{duckdns}.duckdns.org"
 
