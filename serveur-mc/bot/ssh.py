@@ -103,6 +103,42 @@ async def get_jar_url_for_version(version_id: str) -> str:
     return version_manifest["downloads"]["server"]["url"]
 
 
+def stop_minecraft_server(
+    server_key: str,
+    *,
+    host: str | None = None,
+    user: str | None = None,
+    key_path: str | None = None,
+) -> tuple[bool, str]:
+    """
+    Arrête le processus Minecraft d'un serveur via RCON, sans arrêter l'instance EC2.
+
+    Lit les credentials RCON depuis server.properties du serveur cible.
+
+    Returns:
+        (success, message)
+    """
+    _host = host or MC_SERVER_HOST
+    _user = user or MC_SERVER_USER
+    _key_path = key_path or MC_SERVER_KEY_PATH
+
+    if not _host or not _key_path:
+        return (False, "Variables MC_SERVER_HOST et MC_SERVER_KEY_PATH requises.")
+
+    command = f"""
+set -e
+PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
+if [ ! -f "$PROPS" ]; then
+    echo "Fichier server.properties introuvable : $PROPS"
+    exit 1
+fi
+RCON_PORT=$(grep '^rcon.port=' "$PROPS" | cut -d= -f2)
+RCON_PASS=$(grep '^rcon.password=' "$PROPS" | cut -d= -f2)
+/usr/local/bin/mcrcon -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop
+"""
+    return ssh_execute(_host, _user, _key_path, command)
+
+
 def setup_host_instance(
     *,
     host: str | None = None,

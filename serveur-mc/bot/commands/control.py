@@ -7,6 +7,7 @@ from bot.autocomplete import server_autocomplete
 from bot.aws import format_boto_error, get_ec2_client
 from bot.config import get_server_config, load_config
 from bot.permissions import check_permission
+from bot import ssh as ssh_helper
 
 
 def setup(tree: app_commands.CommandTree) -> None:
@@ -96,23 +97,15 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
-        instance_id = server_config.get("instance_id")
-        if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
-            await interaction.response.send_message(
-                ":x: L'ID d'instance configuré est invalide. Corrigez la configuration du serveur.",
-                ephemeral=True,
-            )
-            return
-
         name = server_config.get("name", server)
-        region = server_config.get("region", "eu-north-1")
-        try:
-            ec2 = get_ec2_client(region)
-            ec2.stop_instances(InstanceIds=[instance_id])
-            await interaction.response.send_message(f":red_circle: Le serveur **{name}** est en cours d'arrêt...")
-        except Exception as e:
-            await interaction.response.send_message(
-                format_boto_error(e, action="arrêter le serveur", instance_id=instance_id, region=region),
+
+        await interaction.response.defer()
+        success, output = await asyncio.to_thread(ssh_helper.stop_minecraft_server, server)
+        if success:
+            await interaction.followup.send(f":red_circle: Le serveur Minecraft **{name}** a été arrêté.")
+        else:
+            await interaction.followup.send(
+                f":x: Impossible d'arrêter le serveur **{name}** :\n```\n{output}\n```",
                 ephemeral=True,
             )
 
