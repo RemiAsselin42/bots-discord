@@ -1,11 +1,12 @@
 import asyncio
+import os
 import re
 
 import discord
 from discord import app_commands
 
 from bot import ssh as ssh_helper
-from bot.autocomplete import server_autocomplete
+from bot.autocomplete import server_autocomplete, version_autocomplete
 from bot.aws import format_boto_error, manage_sg_port
 from bot.config import load_config, save_config
 from bot.helpers import slugify_name
@@ -21,36 +22,39 @@ def setup(tree: app_commands.CommandTree) -> None:
         instance_id="ID de l'instance EC2 AWS (ex: i-xxxxxxxxxxxxx)",
         ram="RAM allouée au serveur (ex: 2G, 1.5G, 512M)",
         region="Région AWS de l'instance (ex: eu-north-1, eu-west-3, us-east-1)",
+        version="Version de Minecraft (ex: 1.21.4, latest)",
     )
+    @app_commands.autocomplete(version=version_autocomplete)
     async def createserver_command(
         interaction: discord.Interaction,
         name: str,
         instance_id: str = "i-XXXXXXXXXXXXXXXXX",
         ram: str = "1.5G",
         region: str = "eu-north-1",
+        version: str = "latest",
     ):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Seuls les administrateurs peuvent créer des serveurs.", ephemeral=True
+                ":x: Seuls les administrateurs peuvent créer des serveurs.", ephemeral=True
             )
             return
 
         if not instance_id.startswith("i-") or len(instance_id) != 19:
             await interaction.response.send_message(
-                "❌ Format d'instance_id invalide. Exemple: `i-0123456789abcdef0`", ephemeral=True
+                ":x: Format d'instance_id invalide. Exemple: `i-0123456789abcdef0`", ephemeral=True
             )
             return
 
         ram_upper = ram.upper()
         if not re.match(r"^\d+(\.\d+)?[GM]$", ram_upper):
             await interaction.response.send_message(
-                "❌ Format de RAM invalide. Exemples: `2G`, `1.5G`, `512M`", ephemeral=True
+                ":x: Format de RAM invalide. Exemples: `2G`, `1.5G`, `512M`", ephemeral=True
             )
             return
 
@@ -71,7 +75,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         try:
             port = assign_port(config, interaction.guild.id)
         except ValueError as e:
-            await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+            await interaction.response.send_message(f":x: {e}", ephemeral=True)
             return
 
         server_data: dict = {
@@ -88,22 +92,23 @@ def setup(tree: app_commands.CommandTree) -> None:
         try:
             save_config(config)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
             return
 
         confirm = (
-            f"✅ Serveur **{name}** (`{key}`) enregistré avec succès !\n\n"
-            f"📋 **Configuration :**\n"
+            f":white_check_mark: Serveur **{name}** (`{key}`) enregistré avec succès !\n\n"
+            f":clipboard: **Configuration :**\n"
             f"• Instance: `{instance_id}`\n"
             f"• Région: `{region}`\n"
             f"• Port Minecraft: `{port}`\n"
-            f"• RAM: `{ram_upper}`\n\n"
-            f"⏳ **Installation en cours sur l'instance EC2...**"
+            f"• RAM: `{ram_upper}`\n"
+            f"• Version: `{version}`\n\n"
+            f":hourglass: **Installation en cours sur l'instance EC2...**"
         )
         await interaction.response.send_message(confirm)
 
         # Setup SSH en arrière-plan
-        asyncio.create_task(_run_ssh_setup(interaction, key, port, name, instance_id, region))
+        asyncio.create_task(_run_ssh_setup(interaction, key, port, name, instance_id, region, version))
 
     @tree.command(name="removeserver", description="Supprime un serveur Minecraft de la configuration")
     @app_commands.describe(server="Sélectionnez le serveur à supprimer")
@@ -111,13 +116,13 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def removeserver_command(interaction: discord.Interaction, server: str):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Seuls les administrateurs peuvent supprimer des serveurs.", ephemeral=True
+                ":x: Seuls les administrateurs peuvent supprimer des serveurs.", ephemeral=True
             )
             return
 
@@ -126,7 +131,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         if guild_str not in config["guilds"] or server not in config["guilds"][guild_str]["servers"]:
             await interaction.response.send_message(
-                "❌ Serveur introuvable dans la configuration.", ephemeral=True
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
             return
 
@@ -140,20 +145,20 @@ def setup(tree: app_commands.CommandTree) -> None:
         try:
             save_config(config)
         except Exception as e:
-            await interaction.response.send_message(f"❌ Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
             return
 
         sg_info = ""
         if port and instance_id:
             try:
                 await asyncio.to_thread(manage_sg_port, instance_id, region, port, "revoke")
-                sg_info = f"\n🔒 Port `{port}` fermé dans le Security Group."
+                sg_info = f"\n:lock: Port `{port}` fermé dans le Security Group."
             except Exception as e:
-                sg_info = f"\n⚠️ Port `{port}` non fermé dans le Security Group : {format_boto_error(e, action='révoquer le port', instance_id=instance_id, region=region)}"
+                sg_info = f"\n:warning: Port `{port}` non fermé dans le Security Group : {format_boto_error(e, action='révoquer le port', instance_id=instance_id, region=region)}"
 
-        port_info = f"\n🔓 Port `{port}` libéré." if port else ""
+        port_info = f"\n:unlock: Port `{port}` libéré." if port else ""
         await interaction.response.send_message(
-            f"✅ Serveur **{name}** (`{server}`) supprimé avec succès.{port_info}{sg_info}"
+            f":white_check_mark: Serveur **{name}** (`{server}`) supprimé avec succès.{port_info}{sg_info}"
         )
 
     @tree.command(name="editserver", description="Modifie la configuration d'un serveur existant")
@@ -175,19 +180,19 @@ def setup(tree: app_commands.CommandTree) -> None:
     ):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Seuls les administrateurs peuvent modifier des serveurs.", ephemeral=True
+                ":x: Seuls les administrateurs peuvent modifier des serveurs.", ephemeral=True
             )
             return
 
         if instance_id is not None and (not instance_id.startswith("i-") or len(instance_id) != 19):
             await interaction.response.send_message(
-                "❌ Format d'instance_id invalide. Exemple: `i-0123456789abcdef0`", ephemeral=True
+                ":x: Format d'instance_id invalide. Exemple: `i-0123456789abcdef0`", ephemeral=True
             )
             return
 
@@ -196,7 +201,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         if guild_str not in config["guilds"] or server not in config["guilds"][guild_str]["servers"]:
             await interaction.response.send_message(
-                "❌ Serveur introuvable dans la configuration.", ephemeral=True
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
             return
 
@@ -218,7 +223,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         if not changes:
             await interaction.response.send_message(
-                "⚠️ Aucun paramètre fourni. Rien n'a été modifié.", ephemeral=True
+                ":warning: Aucun paramètre fourni. Rien n'a été modifié.", ephemeral=True
             )
             return
 
@@ -226,10 +231,10 @@ def setup(tree: app_commands.CommandTree) -> None:
             save_config(config)
             display_name = server_data.get("name", server)
             await interaction.response.send_message(
-                f"✅ Serveur **{display_name}** (`{server}`) mis à jour :\n\n" + "\n".join(changes)
+                f":white_check_mark: Serveur **{display_name}** (`{server}`) mis à jour :\n\n" + "\n".join(changes)
             )
         except Exception as e:
-            await interaction.response.send_message(f"❌ Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
 
     # ── Permissions ─────────────────────────────────────────────────────────
 
@@ -242,13 +247,13 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def setpermission_command(interaction: discord.Interaction, command: str, role: discord.Role):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Seuls les administrateurs peuvent modifier les permissions.", ephemeral=True
+                ":x: Seuls les administrateurs peuvent modifier les permissions.", ephemeral=True
             )
             return
 
@@ -266,10 +271,10 @@ def setup(tree: app_commands.CommandTree) -> None:
         try:
             save_config(config)
             await interaction.response.send_message(
-                f"✅ Le rôle **{role.name}** peut maintenant utiliser `/{command}`."
+                f":white_check_mark: Le rôle **{role.name}** peut maintenant utiliser `/{command}`."
             )
         except Exception as e:
-            await interaction.response.send_message(f"❌ Erreur : {e}", ephemeral=True)
+            await interaction.response.send_message(f":x: Erreur : {e}", ephemeral=True)
 
     @tree.command(name="resetpermission", description="Remet les permissions d'une commande aux valeurs par défaut")
     @app_commands.describe(command="Commande à réinitialiser")
@@ -277,13 +282,13 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def resetpermission_command(interaction: discord.Interaction, command: str):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Seuls les administrateurs peuvent modifier les permissions.", ephemeral=True
+                ":x: Seuls les administrateurs peuvent modifier les permissions.", ephemeral=True
             )
             return
 
@@ -298,29 +303,29 @@ def setup(tree: app_commands.CommandTree) -> None:
             default = DEFAULT_PERMISSIONS[command]
             admin_str = "admin uniquement" if default["admin_only"] else "tout le monde"
             await interaction.response.send_message(
-                f"✅ Permissions de `/{command}` réinitialisées (défaut : {admin_str})."
+                f":white_check_mark: Permissions de `/{command}` réinitialisées (défaut : {admin_str})."
             )
         except Exception as e:
-            await interaction.response.send_message(f"❌ Erreur : {e}", ephemeral=True)
+            await interaction.response.send_message(f":x: Erreur : {e}", ephemeral=True)
 
     @tree.command(name="listpermissions", description="Affiche les permissions configurées pour ce serveur Discord")
     async def listpermissions_command(interaction: discord.Interaction):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Seuls les administrateurs peuvent voir les permissions.", ephemeral=True
+                ":x: Seuls les administrateurs peuvent voir les permissions.", ephemeral=True
             )
             return
 
         config = load_config()
         summary = get_permission_summary(interaction.guild.id, config)
 
-        lines = ["🔐 **Permissions des commandes :**\n"]
+        lines = [":closed_lock_with_key: **Permissions des commandes :**\n"]
         for cmd, perm in summary.items():
             admin_only = perm.get("admin_only", False)
             allowed_roles = perm.get("allowed_roles", [])
@@ -341,13 +346,13 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def setchannel_command(interaction: discord.Interaction, channel: discord.TextChannel):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
-                "❌ Seuls les administrateurs peuvent configurer les canaux.", ephemeral=True
+                ":x: Seuls les administrateurs peuvent configurer les canaux.", ephemeral=True
             )
             return
 
@@ -360,10 +365,10 @@ def setup(tree: app_commands.CommandTree) -> None:
         try:
             save_config(config)
             await interaction.response.send_message(
-                f"✅ Les notifications seront envoyées dans {channel.mention}."
+                f":white_check_mark: Les notifications seront envoyées dans {channel.mention}."
             )
         except Exception as e:
-            await interaction.response.send_message(f"❌ Erreur : {e}", ephemeral=True)
+            await interaction.response.send_message(f":x: Erreur : {e}", ephemeral=True)
 
 
 async def _run_ssh_setup(
@@ -373,32 +378,37 @@ async def _run_ssh_setup(
     name: str,
     instance_id: str,
     region: str,
+    version: str = "latest",
 ) -> None:
     """Lance le setup SSH et envoie un follow-up dans le canal."""
-    success, message = ssh_helper.setup_minecraft_server(server_key, port)
+    try:
+        jar_url = await ssh_helper.get_jar_url_for_version(version)
+    except Exception:
+        jar_url = None  # Fallback sur MC_SERVER_JAR_URL par défaut
+
+    success, message = ssh_helper.setup_minecraft_server(server_key, port, jar_url=jar_url)
 
     if success:
-        import os
         duckdns_domain = os.getenv("DUCKDNS_DOMAIN")
         extra = ""
         if duckdns_domain:
             full_domain = duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"
-            extra = f"\n🌐 Domaine: `{full_domain}:{port}`"
+            extra = f"\nDomaine: `{full_domain}:{port}`"
 
         sg_info = ""
         try:
             await asyncio.to_thread(manage_sg_port, instance_id, region, port, "authorize")
-            sg_info = f"\n🔓 Port `{port}` ouvert dans le Security Group."
+            sg_info = f""
         except Exception as e:
-            sg_info = f"\n⚠️ Port `{port}` non ouvert dans le Security Group : {format_boto_error(e, action='ouvrir le port', instance_id=instance_id, region=region)}"
+            sg_info = f"\n:warning: Port `{port}` non ouvert dans le Security Group : {format_boto_error(e, action='ouvrir le port', instance_id=instance_id, region=region)}"
 
         await interaction.followup.send(
-            f"🎉 **Installation terminée !**\n\n{message}{extra}{sg_info}\n\n"
-            f"💡 Utilisez `/start` pour démarrer le serveur."
+            f":tada: **Installation terminée !**\n\n{message}{extra}{sg_info}\n\n"
+            f":point_right: Utilisez `/start` pour démarrer le serveur."
         )
     else:
         await interaction.followup.send(
-            f"⚠️ **Configuration enregistrée mais installation automatique échouée**\n\n"
+            f":warning: **Configuration enregistrée mais installation automatique échouée**\n\n"
             f"{message}\n\n"
             f"Créez manuellement le dossier :\n"
             f"```bash\n"

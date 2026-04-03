@@ -7,6 +7,7 @@ import os
 import secrets
 import string
 
+import aiohttp
 import paramiko
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,28 @@ def generate_rcon_password(length: int = 24) -> str:
     """Génère un mot de passe RCON aléatoire et sûr (lettres + chiffres)."""
     alphabet = string.ascii_letters + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+MOJANG_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
+
+
+async def get_jar_url_for_version(version_id: str) -> str:
+    """Résout un ID de version Minecraft (ex: '1.21.4', 'latest') en URL de server.jar."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(MOJANG_MANIFEST_URL) as resp:
+            manifest = await resp.json()
+
+        if version_id == "latest":
+            version_id = manifest["latest"]["release"]
+
+        version_entry = next((v for v in manifest["versions"] if v["id"] == version_id), None)
+        if version_entry is None:
+            raise ValueError(f"Version Minecraft inconnue : {version_id}")
+
+        async with session.get(version_entry["url"]) as resp:
+            version_manifest = await resp.json()
+
+    return version_manifest["downloads"]["server"]["url"]
 
 
 def setup_host_instance(
@@ -225,8 +248,6 @@ PROPS
     if success:
         return (
             True,
-            f"✅ Serveur `{server_key}` configuré\n"
-            f"📁 Dossier : `/home/ec2-user/minecraft-servers/{server_key}`\n"
-            f"🔌 Port : `{port}`",
+            f"Serveur `{server_key}` configuré\n"
         )
-    return (False, f"❌ Erreur lors de la configuration:\n{output}")
+    return (False, f":x: Erreur lors de la configuration:\n{output}")
