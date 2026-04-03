@@ -13,19 +13,19 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def list_command(interaction: discord.Interaction):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         servers = get_guild_servers(interaction.guild.id, load_config())
         if not servers:
             await interaction.response.send_message(
-                "❌ Aucun serveur Minecraft configuré pour ce serveur Discord.", ephemeral=True
+                ":x: Aucun serveur Minecraft configuré pour ce serveur Discord.", ephemeral=True
             )
             return
 
         lines = "\n".join(f"• **{data.get('name', key)}** (`{key}`)" for key, data in servers.items())
-        await interaction.response.send_message(f"🖥️ **Serveurs Minecraft disponibles :**\n\n{lines}")
+        await interaction.response.send_message(f":desktop: **Serveurs Minecraft disponibles :**\n\n{lines}")
 
     @tree.command(name="ip", description="Obtient l'adresse IP ou le domaine du serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur")
@@ -33,14 +33,14 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def ip_command(interaction: discord.Interaction, server: str):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
             await interaction.response.send_message(
-                "❌ Serveur introuvable dans la configuration.", ephemeral=True
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
             return
 
@@ -52,14 +52,14 @@ def setup(tree: app_commands.CommandTree) -> None:
         if duckdns_domain:
             full_domain = duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"
             await interaction.response.send_message(
-                f"🌐 **Adresse du serveur {name} :**\n\n```{full_domain}:{minecraft_port}```"
+                f":globe_with_meridians: **Adresse du serveur {name} :**\n\n```{full_domain}:{minecraft_port}```"
             )
             return
 
         instance_id = server_config.get("instance_id")
         if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
             await interaction.response.send_message(
-                "❌ L'ID d'instance configuré est invalide. Impossible de récupérer l'IP.", ephemeral=True
+                ":x: L'ID d'instance configuré est invalide. Impossible de récupérer l'IP.", ephemeral=True
             )
             return
 
@@ -69,7 +69,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             response = ec2.describe_instances(InstanceIds=[instance_id])
 
             if not response["Reservations"]:
-                await interaction.followup.send("❌ Instance introuvable.")
+                await interaction.followup.send(":x: Instance introuvable.")
                 return
 
             instance = response["Reservations"][0]["Instances"][0]
@@ -77,18 +77,18 @@ def setup(tree: app_commands.CommandTree) -> None:
 
             if state != "running":
                 await interaction.followup.send(
-                    f"⚠️ Le serveur **{name}** n'est pas en cours d'exécution (état: **{state}**).\n"
+                    f":warning: Le serveur **{name}** n'est pas en cours d'exécution (état: **{state}**).\n"
                     f"Démarrez-le d'abord avec `/start {server}`"
                 )
                 return
 
             public_ip = instance.get("PublicIpAddress")
             if not public_ip:
-                await interaction.followup.send(f"❌ Le serveur **{name}** n'a pas d'adresse IP publique.")
+                await interaction.followup.send(f":x: Le serveur **{name}** n'a pas d'adresse IP publique.")
                 return
 
             await interaction.followup.send(
-                f"🌐 **Adresse du serveur {name} :**\n\n```{public_ip}:{minecraft_port}```"
+                f":globe_with_meridians: **Adresse du serveur {name} :**\n\n```{public_ip}:{minecraft_port}```"
             )
         except Exception as e:
             await interaction.followup.send(
@@ -102,14 +102,14 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def uptime_command(interaction: discord.Interaction, server: str):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
             await interaction.response.send_message(
-                "❌ Serveur introuvable dans la configuration.", ephemeral=True
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
             return
 
@@ -120,7 +120,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
             await interaction.response.send_message(
-                "❌ L'ID d'instance configuré est invalide.", ephemeral=True
+                ":x: L'ID d'instance configuré est invalide.", ephemeral=True
             )
             return
 
@@ -128,19 +128,19 @@ def setup(tree: app_commands.CommandTree) -> None:
             data = get_uptime_and_cost(instance_id, region, hourly_cost)
 
             if data is None:
-                await interaction.response.send_message(f"⚪ Le serveur **{name}** est **arrêté**.")
+                await interaction.response.send_message(f":white_circle: Le serveur **{name}** est **arrêté**.")
                 return
 
             if not data["running"]:
-                await interaction.response.send_message(f"⚪ Le serveur **{name}** est à l'état **{data['state']}**.")
+                await interaction.response.send_message(f":white_circle: Le serveur **{name}** est à l'état **{data['state']}**.")
                 return
 
             await interaction.response.send_message(
-                f"📊 **Uptime - {name}**\n\n"
-                f"⏱️ **État:** {data['state']}\n"
-                f"🕐 **En ligne depuis:** {data['hours']}h {data['minutes']}min ({data['delta'].days} jours)\n"
-                f"💰 **Coût horaire:** ${hourly_cost:.4f}\n"
-                f"📈 **Coût depuis le démarrage:** ${data['cost']:.2f}"
+                f":bar_chart: **Uptime - {name}**\n\n"
+                f":stopwatch: **État:** {data['state']}\n"
+                f":clock1: **En ligne depuis:** {data['hours']}h {data['minutes']}min ({data['delta'].days} jours)\n"
+                f":moneybag: **Coût horaire:** ${hourly_cost:.4f}\n"
+                f":chart_with_upwards_trend: **Coût depuis le démarrage:** ${data['cost']:.2f}"
             )
         except Exception as e:
             await interaction.response.send_message(

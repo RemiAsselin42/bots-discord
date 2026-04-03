@@ -11,7 +11,7 @@ function migrateJsonIfNeeded() {
             const channels = JSON.parse(fs.readFileSync(channelsFile, "utf-8"));
             for (const id of channels) db.addAllowedChannel(id, null);
             fs.renameSync(channelsFile, channelsFile + ".migrated");
-            console.log("✅ Migration allowedChannels.json → SQLite");
+            console.log(":white_check_mark: Migration allowedChannels.json → SQLite");
         } catch (e) {
             console.error("Erreur migration allowedChannels:", e.message);
         }
@@ -26,7 +26,7 @@ function migrateJsonIfNeeded() {
                 }
             }
             fs.renameSync(historyFile, historyFile + ".migrated");
-            console.log("✅ Migration messageHistory.json → SQLite");
+            console.log(":white_check_mark: Migration messageHistory.json → SQLite");
         } catch (e) {
             console.error("Erreur migration messageHistory:", e.message);
         }

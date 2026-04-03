@@ -17,14 +17,14 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def cost_command(interaction: discord.Interaction, server: str):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
             await interaction.response.send_message(
-                "❌ Serveur introuvable dans la configuration.", ephemeral=True
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
             return
 
@@ -35,7 +35,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
             await interaction.response.send_message(
-                "❌ L'ID d'instance configuré est invalide.", ephemeral=True
+                ":x: L'ID d'instance configuré est invalide.", ephemeral=True
             )
             return
 
@@ -43,20 +43,20 @@ def setup(tree: app_commands.CommandTree) -> None:
             data = get_uptime_and_cost(instance_id, region, hourly_cost)
 
             if data is None:
-                await interaction.response.send_message(f"⚪ Le serveur **{name}** est arrêté. Coût actuel : $0.00")
+                await interaction.response.send_message(f":white_circle: Le serveur **{name}** est arrêté. Coût actuel : $0.00")
                 return
 
             if not data["running"]:
                 await interaction.response.send_message(
-                    f"⚪ Le serveur **{name}** est à l'état **{data['state']}**. Impossible de calculer le coût."
+                    f":white_circle: Le serveur **{name}** est à l'état **{data['state']}**. Impossible de calculer le coût."
                 )
                 return
 
             await interaction.response.send_message(
-                f"💰 **Coût - {name}**\n\n"
-                f"⏱️ **En ligne depuis:** {data['hours']}h {data['minutes']}min\n"
-                f"🔢 **Coût horaire:** ${hourly_cost:.4f}/h\n"
-                f"💸 **Coût total actuel:** `${data['cost']:.4f}` (≈ ${data['cost']:.2f})"
+                f":moneybag: **Coût - {name}**\n\n"
+                f":stopwatch: **En ligne depuis:** {data['hours']}h {data['minutes']}min\n"
+                f":1234: **Coût horaire:** ${hourly_cost:.4f}/h\n"
+                f":money_with_wings: **Coût total actuel:** `${data['cost']:.4f}` (≈ ${data['cost']:.2f})"
             )
         except Exception as e:
             await interaction.response.send_message(
@@ -70,14 +70,14 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def players_command(interaction: discord.Interaction, server: str):
         if not interaction.guild:
             await interaction.response.send_message(
-                "❌ Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
             )
             return
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
             await interaction.response.send_message(
-                "❌ Serveur introuvable dans la configuration.", ephemeral=True
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
             return
 
@@ -97,7 +97,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
             if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
                 await interaction.followup.send(
-                    "❌ L'ID d'instance configuré est invalide. Impossible de joindre le serveur.",
+                    ":x: L'ID d'instance configuré est invalide. Impossible de joindre le serveur.",
                     ephemeral=True,
                 )
                 return
@@ -113,7 +113,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
             if host is None:
                 await interaction.followup.send(
-                    f"⚠️ Le serveur **{name}** n'est pas en cours d'exécution ou n'a pas d'IP publique.\n"
+                    f":warning: Le serveur **{name}** n'est pas en cours d'exécution ou n'a pas d'IP publique.\n"
                     f"Démarrez-le d'abord avec `/start {server}`"
                 )
                 return
@@ -124,7 +124,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             status: JavaStatusResponse = await mc.async_status()
         except (ConnectionRefusedError, TimeoutError, OSError):
             await interaction.followup.send(
-                f"⚠️ Le serveur Minecraft **{name}** ne répond pas sur `{host}:{port}`.\n"
+                f":warning: Le serveur Minecraft **{name}** ne répond pas sur `{host}:{port}`.\n"
                 "Il est peut-être en cours de démarrage, ou le port n'est pas accessible."
             )
             return
@@ -134,12 +134,12 @@ def setup(tree: app_commands.CommandTree) -> None:
         sample = status.players.sample or []
 
         if online == 0:
-            msg = f"👥 **{name}** — `0/{max_players}` joueurs connectés."
+            msg = f":busts_in_silhouette: **{name}** — `0/{max_players}` joueurs connectés."
         else:
             player_names = ", ".join(p.name for p in sample) if sample else "noms non disponibles"
             msg = (
-                f"👥 **{name}** — `{online}/{max_players}` joueur(s) connecté(s)\n"
-                f"🎮 {player_names}"
+                f":busts_in_silhouette: **{name}** — `{online}/{max_players}` joueur(s) connecté(s)\n"
+                f":video_game: {player_names}"
             )
 
         await interaction.followup.send(msg)

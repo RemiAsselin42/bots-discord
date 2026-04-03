@@ -56,9 +56,9 @@ async function registerCommands(client) {
     try {
         console.log("⏳ Mise à jour des commandes slash...");
         await rest.put(Routes.applicationCommands(client.user.id), { body: COMMAND_DEFINITIONS });
-        console.log("✅ Commandes enregistrées avec succès !");
+        console.log(":white_check_mark: Commandes enregistrées avec succès !");
     } catch (error) {
-        console.error("❌ Erreur lors de l'enregistrement des commandes:", error);
+        console.error(":x: Erreur lors de l'enregistrement des commandes:", error);
     }
 }
 
@@ -103,12 +103,12 @@ async function handleInteraction(interaction) {
     if (interaction.commandName === "add-channel") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (!hasAdminPermission(interaction)) {
-            await interaction.editReply("❌ Vous devez être administrateur pour utiliser cette commande !");
+            await interaction.editReply(":x: Vous devez être administrateur pour utiliser cette commande !");
             return;
         }
         const added = db.addAllowedChannel(interaction.channelId, interaction.guildId);
         await interaction.editReply(
-            added ? "✅ Je peux maintenant répondre dans ce salon !" : "Ce salon est déjà autorisé ;)"
+            added ? ":white_check_mark: Je peux maintenant répondre dans ce salon !" : "Ce salon est déjà autorisé ;)"
         );
     }
 
@@ -116,14 +116,14 @@ async function handleInteraction(interaction) {
     if (interaction.commandName === "remove-channel") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (!hasAdminPermission(interaction)) {
-            await interaction.editReply("❌ Vous devez être administrateur pour utiliser cette commande !");
+            await interaction.editReply(":x: Vous devez être administrateur pour utiliser cette commande !");
             return;
         }
         const removed = db.removeAllowedChannel(interaction.channelId);
         await interaction.editReply(
             removed
-                ? "✅ Ce salon a été retiré des salons autorisés."
-                : "⚠️ Ce salon n'est pas dans la liste des salons autorisés."
+                ? ":white_check_mark: Ce salon a été retiré des salons autorisés."
+                : ":warning: Ce salon n'est pas dans la liste des salons autorisés."
         );
     }
 
@@ -131,7 +131,7 @@ async function handleInteraction(interaction) {
     if (interaction.commandName === "list-channels") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (!hasAdminPermission(interaction)) {
-            await interaction.editReply("❌ Vous devez être administrateur pour utiliser cette commande !");
+            await interaction.editReply(":x: Vous devez être administrateur pour utiliser cette commande !");
             return;
         }
         const channels = db.getAllowedChannels(interaction.guildId);
@@ -146,7 +146,7 @@ async function handleInteraction(interaction) {
     if (interaction.commandName === "reset-history") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (!hasAdminPermission(interaction)) {
-            await interaction.editReply("❌ Vous devez être administrateur pour utiliser cette commande !");
+            await interaction.editReply(":x: Vous devez être administrateur pour utiliser cette commande !");
             return;
         }
         console.log("Commande /reset-history reçue");
@@ -204,8 +204,8 @@ async function handleInteraction(interaction) {
 
             await interaction.editReply(
                 suggestions
-                    ? `⚠️ Je n'ai pas trouvé ce sujet exact. Essaie un sujet indexé :\n${suggestions}`
-                    : "⚠️ Je n'ai pas trouvé ce sujet dans les infos indexées. Utilise /memory-list pour voir les sujets disponibles."
+                    ? `:warning: Je n'ai pas trouvé ce sujet exact. Essaie un sujet indexé :\n${suggestions}`
+                    : ":warning: Je n'ai pas trouvé ce sujet dans les infos indexées. Utilise /memory-list pour voir les sujets disponibles."
             );
             return;
         }
@@ -220,7 +220,7 @@ async function handleInteraction(interaction) {
         db.clearChannelSummary(channelId);
 
         const deletedLabel = deletedFacts.map((f) => f.key).join(", ");
-        await interaction.editReply(`✅ C'est oublié pour "${deletedLabel}".`);
+        await interaction.editReply(`:white_check_mark: C'est oublié pour "${deletedLabel}".`);
     }
 
     // /memory-list
@@ -265,7 +265,7 @@ async function handleInteraction(interaction) {
 
         await interaction.editReply(
             removed || removedFacts
-                ? "✅ C'est effacé, je ne me souviens plus de rien sur toi."
+                ? ":white_check_mark: C'est effacé, je ne me souviens plus de rien sur toi."
                 : "ℹ️ Je n'avais pas d'information personnelle en mémoire sur toi."
         );
     }

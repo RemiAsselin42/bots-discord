@@ -52,7 +52,7 @@ async def notify_server_ready(
                 channel = bot.get_channel(channel_id)
                 if channel:
                     await channel.send(
-                        f"✅ Le serveur **{server_name}** est prêt ! Utilisez `/ip` pour obtenir l'adresse."
+                        f":white_check_mark: Le serveur **{server_name}** est prêt ! Utilisez `/ip` pour obtenir l'adresse."
                     )
                 return
         except Exception as exc:
@@ -62,7 +62,7 @@ async def notify_server_ready(
     channel = bot.get_channel(channel_id)
     if channel:
         await channel.send(
-            f"⚠️ Le serveur **{server_name}** met plus de {timeout // 60} minutes à démarrer. "
+            f":warning: Le serveur **{server_name}** met plus de {timeout // 60} minutes à démarrer. "
             "Vérifiez la console AWS."
         )
 
@@ -164,7 +164,7 @@ async def _check_and_stop_if_idle(
             channel = bot.get_channel(int(notification_channel_id))
             if channel:
                 await channel.send(
-                    f"🔴 **Auto-stop** — Le serveur **{name}** a été arrêté automatiquement "
+                    f":red_circle: **Auto-stop** — Le serveur **{name}** a été arrêté automatiquement "
                     f"après **{int(idle_minutes)} minutes** sans joueur connecté."
                 )
     except Exception as exc:

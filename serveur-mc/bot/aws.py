@@ -48,7 +48,7 @@ def format_boto_error(
     region: str | None = None,
 ) -> str:
     """Retourne un message utilisateur clair pour les erreurs AWS/boto3."""
-    prefix = f"❌ Impossible de {action}."
+    prefix = f":x: Impossible de {action}."
 
     if isinstance(e, NoCredentialsError):
         return (
