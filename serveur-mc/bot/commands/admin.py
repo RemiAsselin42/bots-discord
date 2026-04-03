@@ -24,7 +24,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def createserver_command(
         interaction: discord.Interaction,
         name: str,
-        instance_id: str,
+        instance_id: str = "i-XXXXXXXXXXXXXXXXX",
         ram: str = "1.5G",
         region: str = "eu-north-1",
     ):
