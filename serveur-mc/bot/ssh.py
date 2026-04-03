@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import string
+import threading
 
 import aiohttp
 import paramiko
@@ -66,7 +67,17 @@ def ssh_execute(
         key = load_ssh_key(key_path)
         ssh.connect(hostname=host, username=user, pkey=key, timeout=timeout)
         _, stdout, stderr = ssh.exec_command(command)
-        output = stdout.read().decode() + stderr.read().decode()
+        stdout_chunks: list[bytes] = []
+        stderr_chunks: list[bytes] = []
+        t_out = threading.Thread(target=lambda: stdout_chunks.append(stdout.read()))
+        t_err = threading.Thread(target=lambda: stderr_chunks.append(stderr.read()))
+        t_out.start()
+        t_err.start()
+        t_out.join()
+        t_err.join()
+        output = (stdout_chunks[0] if stdout_chunks else b"").decode() + (
+            stderr_chunks[0] if stderr_chunks else b""
+        ).decode()
         exit_status = stdout.channel.recv_exit_status()
         return (exit_status == 0, output)
     except Exception as e:
