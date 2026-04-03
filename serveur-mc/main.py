@@ -33,7 +33,7 @@ stats.setup(tree)
 
 async def _setup_host() -> None:
     """Lance le setup de l'instance Minecraft Host en arrière-plan au démarrage."""
-    if not os.getenv("MC_SERVER_HOST"):
+    if not os.getenv("MC_SERVER_HOST") and not os.getenv("MC_SERVER_INSTANCE_ID"):
         return
     logger.info("[setup_host] Démarrage du setup de l'instance Minecraft Host...")
     success, msg = await asyncio.to_thread(setup_host_instance)
