@@ -9,11 +9,14 @@ import string
 import threading
 
 import aiohttp
+import boto3
 import paramiko
 
 logger = logging.getLogger(__name__)
 
 MC_SERVER_HOST = os.getenv("MC_SERVER_HOST", "")
+MC_SERVER_INSTANCE_ID = os.getenv("MC_SERVER_INSTANCE_ID", "")
+MC_SERVER_REGION = os.getenv("MC_SERVER_REGION", "eu-north-1")
 MC_SERVER_USER = os.getenv("MC_SERVER_USER", "ec2-user")
 MC_SERVER_KEY_PATH = os.getenv("MC_SERVER_KEY_PATH", "")
 MC_SERVER_JAR_URL = os.getenv(
@@ -45,6 +48,36 @@ def load_ssh_key(key_path: str) -> paramiko.PKey:
         f"Format de clé SSH non reconnu pour '{key_path}'. "
         f"Formats supportés : RSA PEM, OpenSSH, ECDSA, Ed25519, DSS. "
         f"Dernière erreur : {last_exc}"
+    )
+
+
+def get_instance_public_ip(instance_id: str, region: str = MC_SERVER_REGION) -> str:
+    """Retourne l'IP publique courante d'une instance EC2 via boto3."""
+    ec2 = boto3.client("ec2", region_name=region)
+    resp = ec2.describe_instances(InstanceIds=[instance_id])
+    ip = resp["Reservations"][0]["Instances"][0].get("PublicIpAddress")
+    if not ip:
+        raise RuntimeError(f"Aucune IP publique pour l'instance {instance_id} (arrêtée ?)")
+    return ip
+
+
+def _resolve_host(host_override: str | None) -> str:
+    """
+    Résout l'hôte SSH dans l'ordre de priorité :
+    1. host_override (argument explicite)
+    2. MC_SERVER_HOST (variable d'env statique)
+    3. IP résolue dynamiquement depuis MC_SERVER_INSTANCE_ID via boto3
+
+    Lève RuntimeError si aucune source n'est disponible.
+    """
+    if host_override:
+        return host_override
+    if MC_SERVER_HOST:
+        return MC_SERVER_HOST
+    if MC_SERVER_INSTANCE_ID:
+        return get_instance_public_ip(MC_SERVER_INSTANCE_ID)
+    raise RuntimeError(
+        "Hôte SSH introuvable : définissez MC_SERVER_HOST ou MC_SERVER_INSTANCE_ID."
     )
 
 
@@ -129,12 +162,15 @@ def stop_minecraft_server(
     Returns:
         (success, message)
     """
-    _host = host or MC_SERVER_HOST
     _user = user or MC_SERVER_USER
     _key_path = key_path or MC_SERVER_KEY_PATH
 
-    if not _host or not _key_path:
-        return (False, "Variables MC_SERVER_HOST et MC_SERVER_KEY_PATH requises.")
+    if not _key_path:
+        return (False, "Variable MC_SERVER_KEY_PATH requise.")
+    try:
+        _host = _resolve_host(host)
+    except Exception as e:
+        return (False, f"Impossible de résoudre l'hôte SSH : {e}")
 
     command = f"""
 set -e
@@ -169,12 +205,15 @@ def setup_host_instance(
     Returns:
         (success, message)
     """
-    _host = host or MC_SERVER_HOST
     _user = user or MC_SERVER_USER
     _key_path = key_path or MC_SERVER_KEY_PATH
 
-    if not _host or not _key_path:
-        return (False, "Variables MC_SERVER_HOST et MC_SERVER_KEY_PATH requises.")
+    if not _key_path:
+        return (False, "Variable MC_SERVER_KEY_PATH requise.")
+    try:
+        _host = _resolve_host(host)
+    except Exception as e:
+        return (False, f"Impossible de résoudre l'hôte SSH : {e}")
 
     # 1. Installer Java 21 et créer le répertoire de base
     install_cmd = f"""
@@ -252,13 +291,16 @@ def setup_minecraft_server(
     Returns:
         (success, message)
     """
-    _host = host or MC_SERVER_HOST
     _user = user or MC_SERVER_USER
     _key_path = key_path or MC_SERVER_KEY_PATH
     _jar_url = jar_url or MC_SERVER_JAR_URL
 
-    if not _host or not _key_path:
-        return (False, "Variables MC_SERVER_HOST et MC_SERVER_KEY_PATH requises.")
+    if not _key_path:
+        return (False, "Variable MC_SERVER_KEY_PATH requise.")
+    try:
+        _host = _resolve_host(host)
+    except Exception as e:
+        return (False, f"Impossible de résoudre l'hôte SSH : {e}")
 
     rcon_port = port + 10
     rcon_password = generate_rcon_password()
