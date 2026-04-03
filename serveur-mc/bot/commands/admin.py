@@ -6,6 +6,7 @@ from discord import app_commands
 
 from bot import ssh as ssh_helper
 from bot.autocomplete import server_autocomplete
+from bot.aws import format_boto_error, manage_sg_port
 from bot.config import load_config, save_config
 from bot.helpers import slugify_name
 from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_permission_summary
@@ -102,7 +103,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         await interaction.response.send_message(confirm)
 
         # Setup SSH en arrière-plan
-        asyncio.create_task(_run_ssh_setup(interaction, key, port, name))
+        asyncio.create_task(_run_ssh_setup(interaction, key, port, name, instance_id, region))
 
     @tree.command(name="removeserver", description="Supprime un serveur Minecraft de la configuration")
     @app_commands.describe(server="Sélectionnez le serveur à supprimer")
@@ -132,16 +133,28 @@ def setup(tree: app_commands.CommandTree) -> None:
         server_data = config["guilds"][guild_str]["servers"][server]
         name = server_data.get("name", server)
         port = server_data.get("port")
+        instance_id = server_data.get("instance_id")
+        region = server_data.get("region", "eu-north-1")
         del config["guilds"][guild_str]["servers"][server]
 
         try:
             save_config(config)
-            port_info = f"\n🔓 Port `{port}` libéré." if port else ""
-            await interaction.response.send_message(
-                f"✅ Serveur **{name}** (`{server}`) supprimé avec succès.{port_info}"
-            )
         except Exception as e:
             await interaction.response.send_message(f"❌ Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            return
+
+        sg_info = ""
+        if port and instance_id:
+            try:
+                await asyncio.to_thread(manage_sg_port, instance_id, region, port, "revoke")
+                sg_info = f"\n🔒 Port `{port}` fermé dans le Security Group."
+            except Exception as e:
+                sg_info = f"\n⚠️ Port `{port}` non fermé dans le Security Group : {format_boto_error(e, action='révoquer le port', instance_id=instance_id, region=region)}"
+
+        port_info = f"\n🔓 Port `{port}` libéré." if port else ""
+        await interaction.response.send_message(
+            f"✅ Serveur **{name}** (`{server}`) supprimé avec succès.{port_info}{sg_info}"
+        )
 
     @tree.command(name="editserver", description="Modifie la configuration d'un serveur existant")
     @app_commands.describe(
@@ -358,6 +371,8 @@ async def _run_ssh_setup(
     server_key: str,
     port: int,
     name: str,
+    instance_id: str,
+    region: str,
 ) -> None:
     """Lance le setup SSH et envoie un follow-up dans le canal."""
     success, message = ssh_helper.setup_minecraft_server(server_key, port)
@@ -369,10 +384,17 @@ async def _run_ssh_setup(
         if duckdns_domain:
             full_domain = duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"
             extra = f"\n🌐 Domaine: `{full_domain}:{port}`"
+
+        sg_info = ""
+        try:
+            await asyncio.to_thread(manage_sg_port, instance_id, region, port, "authorize")
+            sg_info = f"\n🔓 Port `{port}` ouvert dans le Security Group."
+        except Exception as e:
+            sg_info = f"\n⚠️ Port `{port}` non ouvert dans le Security Group : {format_boto_error(e, action='ouvrir le port', instance_id=instance_id, region=region)}"
+
         await interaction.followup.send(
-            f"🎉 **Installation terminée !**\n\n{message}{extra}\n\n"
-            f"💡 Utilisez `/start` pour démarrer le serveur.\n"
-            f"⚠️ N'oubliez pas d'ouvrir le port `{port}` dans le Security Group AWS !"
+            f"🎉 **Installation terminée !**\n\n{message}{extra}{sg_info}\n\n"
+            f"💡 Utilisez `/start` pour démarrer le serveur."
         )
     else:
         await interaction.followup.send(

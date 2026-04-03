@@ -15,6 +15,31 @@ def get_cloudwatch_client(region: str):
     return boto3.client("cloudwatch", region_name=region)
 
 
+def manage_sg_port(instance_id: str, region: str, port: int, action: str) -> None:
+    """Ouvre ou ferme un port TCP dans le Security Group de l'instance EC2.
+
+    action: 'authorize' ou 'revoke'
+    """
+    ec2 = get_ec2_client(region)
+    response = ec2.describe_instances(InstanceIds=[instance_id])
+    sg_id = response["Reservations"][0]["Instances"][0]["SecurityGroups"][0]["GroupId"]
+    ip_permission = {
+        "IpProtocol": "tcp",
+        "FromPort": port,
+        "ToPort": port,
+        "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": f"Minecraft port {port}"}],
+    }
+    try:
+        if action == "authorize":
+            ec2.authorize_security_group_ingress(GroupId=sg_id, IpPermissions=[ip_permission])
+        else:
+            ec2.revoke_security_group_ingress(GroupId=sg_id, IpPermissions=[ip_permission])
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code not in ("InvalidPermission.Duplicate", "InvalidPermission.NotFound"):
+            raise
+
+
 def format_boto_error(
     e: Exception,
     *,
