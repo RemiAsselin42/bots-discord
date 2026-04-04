@@ -177,8 +177,8 @@ async def update_duckdns(domain: str, token: str, ip: str) -> bool:
 def start_minecraft_process(
     server_key: str,
     *,
-    max_ram: str = "1.5G",
-    min_ram: str = "1G",
+    max_ram: str = "1536M",
+    min_ram: str = "1024M",
     host: str | None = None,
     user: str | None = None,
     key_path: str | None = None,

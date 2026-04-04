@@ -20,7 +20,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.describe(
         name="Nom affiché du serveur",
         instance_id="ID de l'instance EC2 AWS (ex: i-xxxxxxxxxxxxx)",
-        ram="RAM allouée au serveur (ex: 2G, 1.5G, 512M)",
+        ram="RAM allouée au serveur (ex: 2G, 1536M, 512M) — entiers uniquement",
         region="Région AWS de l'instance (ex: eu-north-1, eu-west-3, us-east-1)",
         version="Version de Minecraft (ex: 1.21.4, latest)",
     )
@@ -29,7 +29,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         interaction: discord.Interaction,
         name: str,
         instance_id: str = "i-XXXXXXXXXXXXXXXXX",
-        ram: str = "1.5G",
+        ram: str = "1536M",
         region: str = "eu-north-1",
         version: str = "latest",
     ):
@@ -52,9 +52,10 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         ram_upper = ram.upper()
-        if not re.match(r"^\d+(\.\d+)?[GM]$", ram_upper):
+        if not re.match(r"^\d+[GM]$", ram_upper):
             await interaction.response.send_message(
-                ":x: Format de RAM invalide. Exemples: `2G`, `1.5G`, `512M`", ephemeral=True
+                ":x: Format de RAM invalide. Exemples : `2G`, `1536M`, `512M` (entiers uniquement — pas de décimales).",
+                ephemeral=True,
             )
             return
 

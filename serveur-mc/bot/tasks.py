@@ -134,8 +134,8 @@ async def notify_server_ready(
         mc_started, mc_output = await asyncio.to_thread(
             start_minecraft_process,
             server_key,
-            max_ram=server_config.get("max_ram", "1.5G"),
-            min_ram=server_config.get("min_ram", "1G"),
+            max_ram=server_config.get("max_ram", "1536M"),
+            min_ram=server_config.get("min_ram", "1024M"),
             host=ssh_host,
         )
         if not mc_started:
