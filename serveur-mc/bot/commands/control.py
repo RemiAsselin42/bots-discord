@@ -117,9 +117,18 @@ def setup(tree: app_commands.CommandTree) -> None:
         name = server_config.get("name", server)
         instance_id = server_config.get("instance_id")
         region = server_config.get("region", "eu-north-1")
+        ssh_host = server_config.get("ssh_host") or None
+
+        # En multi-instance, /stop doit viser explicitement l'hôte du serveur ciblé.
+        # Sinon le helper peut retomber sur MC_SERVER_INSTANCE_ID global.
+        if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
+            try:
+                ssh_host = await asyncio.to_thread(ssh_helper.get_instance_public_ip, instance_id, region)
+            except Exception:
+                ssh_host = None
 
         await interaction.response.defer()
-        success, output = await asyncio.to_thread(ssh_helper.stop_minecraft_server, server)
+        success, output = await asyncio.to_thread(ssh_helper.stop_minecraft_server, server, host=ssh_host)
         if not success:
             if "Connection refused" in output or "Error 111" in output:
                 msg = (
@@ -128,13 +137,16 @@ def setup(tree: app_commands.CommandTree) -> None:
                     "Il est peut-être encore en cours de démarrage — réessayez dans quelques secondes."
                 )
             else:
-                msg = f":x: Impossible d'arrêter le serveur **{name}** :\n```\n{output}\n```"
+                host_info = ssh_host or "(résolution par défaut)"
+                msg = (
+                    f":x: Impossible d'arrêter le serveur **{name}** (hôte SSH: `{host_info}`) :\n"
+                    f"```\n{output}\n```"
+                )
             await interaction.followup.send(msg, ephemeral=True)
             return
 
         # Vérifier si d'autres serveurs MC tournent sur la même instance
         # On passe ssh_host explicitement pour les contextes multi-instances
-        ssh_host = server_config.get("ssh_host") or None
         check_success, running_others = await asyncio.to_thread(
             ssh_helper.check_other_mc_servers_running, server, host=ssh_host
         )
