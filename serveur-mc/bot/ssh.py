@@ -469,10 +469,14 @@ if [ -z "$PID" ]; then
     exit 0
 fi
 
-kill -TERM "$PID" || true
+PID_USER=$(ps -o user= -p "$PID" 2>/dev/null | tr -d ' ' || true)
+echo "Fallback stop sur PID $PID (owner: ${{PID_USER:-unknown}})"
+
+# Tentative normale puis sudo (utile si le process n'appartient pas à l'utilisateur SSH).
+kill -TERM "$PID" || sudo -n kill -TERM "$PID" || true
 sleep 8
 if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
-    pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || true
+    pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || sudo -n pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || true
     sleep 1
 fi
 
