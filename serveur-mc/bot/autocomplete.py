@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 
 from bot.config import get_guild_servers, load_config
-from bot.ssh import MOJANG_MANIFEST_URL
+from bot.ssh import MOJANG_MANIFEST_URL, MAX_MC_VERSION, _parse_mc_version
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +42,21 @@ async def version_autocomplete(
     # Afficher les snapshots uniquement si l'input contient des lettres (ex: "24w", "pre", "rc")
     show_snapshots = bool(re.search(r"[a-zA-Z]", current))
 
+    max_str = ".".join(str(x) for x in MAX_MC_VERSION)
     choices: list[app_commands.Choice[str]] = []
 
     if not current:
-        choices.append(app_commands.Choice(name="latest (dernière release)", value="latest"))
+        choices.append(app_commands.Choice(name=f"{max_str} (dernière version compatible Java 21)", value=max_str))
 
     for v in _mc_versions_cache:
         if v["type"] not in ("release", "snapshot"):
             continue
         if v["type"] == "snapshot" and not show_snapshots:
             continue
+        if v["type"] == "release":
+            parsed = _parse_mc_version(v["id"])
+            if parsed is not None and parsed > MAX_MC_VERSION:
+                continue
         if current and current.lower() not in v["id"].lower():
             continue
         choices.append(app_commands.Choice(name=v["id"], value=v["id"]))
