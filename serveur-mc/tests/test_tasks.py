@@ -4,6 +4,7 @@ Tests pour bot/tasks.py — notify_server_ready et auto_stop_loop.
 Stratégie :
 - Les appels boto3 (synchrones) sont mockés via MagicMock.
 - Les appels mcstatus (async) sont mockés via AsyncMock.
+- Les phases SSH et RCON (bot.ssh.*) sont mockées via patch + MagicMock/AsyncMock.
 - Le bot Discord est un MagicMock dont get_channel() retourne un canal fictif.
 """
 import datetime
@@ -13,6 +14,8 @@ import pytest
 
 from bot.tasks import (
     _DEFAULT_IDLE_TIMEOUT,
+    _RCON_READY_RETRIES,
+    _RCON_READY_INTERVAL,
     _check_and_stop_if_idle,
     _idle_since,
     notify_server_ready,
@@ -32,7 +35,7 @@ def _ec2_state(state: str) -> MagicMock:
     """Retourne un faux client EC2 dont describe_instances retourne l'état donné."""
     ec2 = MagicMock()
     ec2.describe_instances.return_value = {
-        "Reservations": [{"Instances": [{"State": {"Name": state}}]}]
+        "Reservations": [{"Instances": [{"State": {"Name": state}, "PublicIpAddress": "1.2.3.4"}]}]
     }
     ec2.describe_instance_status.return_value = {
         "InstanceStatuses": [{"InstanceState": {"Name": state}}]
@@ -43,52 +46,84 @@ def _ec2_state(state: str) -> MagicMock:
 # ── notify_server_ready ───────────────────────────────────────────────────────
 
 async def test_notify_sends_when_running():
+    """Phase heureuse : EC2 running → SSH OK → MC démarré → RCON OK → message 'prêt'."""
     send = AsyncMock()
     bot = _make_bot(send)
     ec2 = _ec2_state("running")
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2):
+    # asyncio.to_thread est appelé pour : ssh_execute (×1), start_minecraft_process (×1),
+    # check_rcon_ready (×1). On retourne un succès pour chaque appel.
+    ssh_results = iter([(True, "ok"), (True, "Started PID 1"), (True, "There are 0 players")])
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        return next(ssh_results)
+
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.asyncio.sleep", new=AsyncMock()),
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
+        # update_duckdns est importé localement depuis bot.ssh dans notify_server_ready
+        patch("bot.ssh.update_duckdns", new=AsyncMock(return_value=True)),
+        patch("bot.ssh.MC_SERVER_KEY_PATH", "/fake/key.pem"),
+    ):
         await notify_server_ready(
             bot=bot,
             channel_id=42,
             server_name="Survie",
             instance_id="i-0123456789abcdef0",
             region="eu-north-1",
-            poll_interval=0,  # pas d'attente en test
+            server_key="survival",
+            server_config={"duckdns_domain": "mc-test"},
+            poll_interval=0,
         )
 
-    send.assert_awaited_once()
-    assert "prêt" in send.call_args[0][0]
+    # Le canal doit avoir reçu au moins deux messages :
+    # - le message intermédiaire (EC2 active, attente SSH)
+    # - le message final "prêt"
+    assert send.await_count >= 2
+    final_msg = send.call_args_list[-1][0][0]
+    assert "prêt" in final_msg
 
 
 async def test_notify_timeout_sends_warning():
+    """EC2 reste en 'pending' → timeout → message d'avertissement AWS."""
     send = AsyncMock()
     bot = _make_bot(send)
     ec2 = _ec2_state("pending")  # ne passe jamais à running
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2):
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.asyncio.sleep", new=AsyncMock()),
+    ):
         await notify_server_ready(
             bot=bot,
             channel_id=42,
             server_name="Survie",
             instance_id="i-0123456789abcdef0",
             region="eu-north-1",
+            server_key="survival",
+            server_config={},
             timeout=0,       # timeout immédiat
             poll_interval=0,
         )
 
     send.assert_awaited_once()
-    assert "démarrer" in send.call_args[0][0]
-    assert "AWS" in send.call_args[0][0]
+    msg = send.call_args[0][0]
+    assert "démarrer" in msg
+    assert "AWS" in msg
 
 
 async def test_notify_handles_ec2_exception_gracefully():
+    """Exception boto3 → ne doit pas lever d'exception, sort proprement après timeout."""
     send = AsyncMock()
     bot = _make_bot(send)
     ec2 = MagicMock()
     ec2.describe_instances.side_effect = Exception("AWS down")
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2):
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.asyncio.sleep", new=AsyncMock()),
+    ):
         # Ne doit pas lever d'exception
         await notify_server_ready(
             bot=bot,
@@ -96,9 +131,60 @@ async def test_notify_handles_ec2_exception_gracefully():
             server_name="Survie",
             instance_id="i-0123456789abcdef0",
             region="eu-north-1",
+            server_key="survival",
+            server_config={},
             timeout=0,
             poll_interval=0,
         )
+
+
+async def test_notify_rcon_timeout_after_mc_started():
+    """MC démarré mais RCON ne répond jamais → message d'avertissement RCON timeout."""
+    send = AsyncMock()
+    bot = _make_bot(send)
+    ec2 = _ec2_state("running")
+
+    # ssh_execute → SSH ready ; start_minecraft_process → succès ; check_rcon_ready → toujours False
+    call_index = 0
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        nonlocal call_index
+        call_index += 1
+        # 1er appel : ssh_execute (check SSH)
+        if call_index == 1:
+            return (True, "ok")
+        # 2e appel : start_minecraft_process
+        if call_index == 2:
+            return (True, "Started PID 42")
+        # Appels suivants : check_rcon_ready → toujours échec
+        return (False, "Connection refused")
+
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.asyncio.sleep", new=AsyncMock()),
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
+        # update_duckdns est importé localement depuis bot.ssh dans notify_server_ready
+        patch("bot.ssh.update_duckdns", new=AsyncMock(return_value=True)),
+        patch("bot.ssh.MC_SERVER_KEY_PATH", "/fake/key.pem"),
+    ):
+        await notify_server_ready(
+            bot=bot,
+            channel_id=42,
+            server_name="Survie",
+            instance_id="i-0123456789abcdef0",
+            region="eu-north-1",
+            server_key="survival",
+            server_config={"duckdns_domain": "mc-test"},
+            poll_interval=0,
+        )
+
+    # Doit avoir reçu : message intermédiaire + message RCON timeout
+    assert send.await_count >= 2
+    final_msg = send.call_args_list[-1][0][0]
+    assert "RCON" in final_msg
+    # Le délai calculé doit correspondre aux constantes
+    expected_minutes = _RCON_READY_RETRIES * _RCON_READY_INTERVAL // 60
+    assert str(expected_minutes) in final_msg
 
 
 # ── _check_and_stop_if_idle ───────────────────────────────────────────────────
@@ -208,8 +294,15 @@ async def test_auto_stop_triggered_after_timeout():
     mc_server = MagicMock()
     mc_server.async_status = AsyncMock(return_value=mc_status)
 
+    # asyncio.to_thread appelle stop_minecraft_server puis check_other_mc_servers_running
+    to_thread_results = iter([(True, "stopped"), (True, [])])
+
+    async def fake_to_thread_autostop(fn, *args, **kwargs):
+        return next(to_thread_results)
+
     with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java:
+         patch("bot.tasks.JavaServer") as mock_java, \
+         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread_autostop):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,
@@ -237,8 +330,14 @@ async def test_auto_stop_no_notification_when_no_channel():
     mc_server = MagicMock()
     mc_server.async_status = AsyncMock(return_value=mc_status)
 
+    to_thread_results = iter([(True, "stopped"), (True, [])])
+
+    async def fake_to_thread_autostop(fn, *args, **kwargs):
+        return next(to_thread_results)
+
     with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java:
+         patch("bot.tasks.JavaServer") as mock_java, \
+         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread_autostop):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,

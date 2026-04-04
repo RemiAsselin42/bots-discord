@@ -69,6 +69,7 @@ DUCKDNS_TOKEN=
 # MC_SERVER_HOST=ec2-xx-xx-xx-xx.eu-north-1.compute.amazonaws.com
 # MC_SERVER_USER=ec2-user
 # MC_SERVER_KEY_PATH=/keys/server-mc.pem
+# MC_MCRCON_PATH=/usr/local/bin/mcrcon  # chemin vers le binaire mcrcon sur l'instance EC2
 
 # AWS : à renseigner uniquement en dehors d'une instance EC2
 # AWS_ACCESS_KEY_ID=
@@ -159,6 +160,25 @@ La commande `/createserver` :
    - Génération de `eula.txt` et `server.properties`
 
 Variables d'environnement requises pour le SSH : `MC_SERVER_HOST`, `MC_SERVER_KEY_PATH` (et optionnellement `MC_SERVER_USER`, `MC_SERVER_JAR_URL`).
+
+### Prérequis sur l'instance EC2
+
+Le bot contrôle les serveurs Minecraft via SSH et RCON. L'instance EC2 doit avoir les outils suivants installés :
+
+- **Java 21** (installé automatiquement par `/createserver` via `amazon-corretto-headless`)
+- **mcrcon** — client RCON en ligne de commande, utilisé par le bot pour envoyer des commandes aux serveurs et vérifier leur disponibilité
+
+Installation de `mcrcon` sur l'instance (Amazon Linux 2023 / AL2) :
+
+```bash
+# Compilation depuis les sources (recommandé)
+sudo dnf install -y gcc git
+git clone https://github.com/Tiiffi/mcrcon.git /tmp/mcrcon
+cd /tmp/mcrcon && make && sudo make install
+# Binaire installé dans /usr/local/bin/mcrcon (chemin par défaut)
+```
+
+Le chemin du binaire est configurable via la variable d'environnement `MC_MCRCON_PATH` (défaut : `/usr/local/bin/mcrcon`). Utile si l'instance EC2 utilise un chemin d'installation différent.
 
 ## Configuration DuckDNS
 
