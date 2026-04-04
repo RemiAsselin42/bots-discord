@@ -261,34 +261,8 @@ if [ ! -f eula.txt ] || ! grep -q '^eula=true$' eula.txt; then
 fi
 
 setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
-sleep 3
-if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
-    echo "Started PID $!"
-    exit 0
-fi
-
-echo "Le processus Minecraft a quitté juste après le démarrage. Tentatives avec profils RAM réduits..."
-
-try_start() {{
-    XMX="$1"
-    XMS="$2"
-    echo "Tentative start avec -Xmx$XMX -Xms$XMS"
-    setsid nohup java -Xmx"$XMX" -Xms"$XMS" -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
-    CAND_PID=$!
-    sleep 4
-    if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
-        echo "Started with fallback RAM ($XMX/$XMS) PID $CAND_PID"
-        return 0
-    fi
-    return 1
-}}
-
-try_start 1024M 512M || try_start 768M 512M || try_start 512M 256M || {{
-    echo "Échec de toutes les tentatives RAM (config demandée + fallbacks)."
-    [ -f stdout.log ] && tail -n 160 stdout.log || true
-    [ -f logs/latest.log ] && tail -n 160 logs/latest.log || true
-    exit 1
-}}
+sleep 2
+echo "Start command dispatched PID $!"
 """
     return ssh_execute(_host, _user, _key_path, command, timeout=30)
 
@@ -360,16 +334,8 @@ def check_rcon_ready(
 set -e
 PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
 SERVER_DIR="/home/{_user}/minecraft-servers/{server_key}"
-    MC_PROC_PATTERN='[j]ava .*minecraft-servers/{server_key}/server.jar'
 if [ ! -f "$PROPS" ]; then
     echo "Fichier server.properties introuvable : $PROPS"
-    exit 1
-fi
-
-    if ! pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
-    echo "PROCESS_EXITED"
-    [ -f "$SERVER_DIR/logs/latest.log" ] && tail -n 40 "$SERVER_DIR/logs/latest.log" || true
-    [ -f "$SERVER_DIR/stdout.log" ] && tail -n 40 "$SERVER_DIR/stdout.log" || true
     exit 1
 fi
 
