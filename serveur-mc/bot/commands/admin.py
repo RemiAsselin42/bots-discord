@@ -100,7 +100,10 @@ class _InstanceStartView(discord.ui.View):
             )
             return
 
-        await btn_interaction.followup.send(":white_check_mark: Instance démarrée — lancement de l'installation SSH…")
+        await btn_interaction.followup.send(
+            ":white_check_mark: Instance démarrée — attente que SSH soit disponible (30s)…"
+        )
+        await asyncio.sleep(30)
         await _run_ssh_setup(
             self._orig, self._server_key, self._port, self._name, self._instance_id, self._region, self._version
         )
