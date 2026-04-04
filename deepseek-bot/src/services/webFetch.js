@@ -1,4 +1,7 @@
-const axios = require("axios");
+// axios@1.x expose ses méthodes directement en CJS mais TS voit le type ESM (module namespace).
+// On normalise vers AxiosStatic via .default pour que les types soient corrects.
+/** @type {import('axios').AxiosStatic} */
+const axios = /** @type {any} */ (require("axios")).default ?? require("axios");
 const { URL } = require("url");
 const dns = require("dns").promises;
 const net = require("net");
@@ -146,10 +149,8 @@ function extractTextFromHtml(html) {
 /**
  * Récupère une page web et extrait son texte lisible.
  * @param {string} url - URL à récupérer
- * @param {object} options
- * @param {number} options.timeoutMs - Timeout en ms (défaut 10s)
- * @param {number} options.maxChars - Taille max du texte extrait (défaut 4000)
- * @returns {{ url, title, content }}
+ * @param {{ timeoutMs?: number, maxChars?: number }} [options] - Options (timeoutMs défaut 10s, maxChars défaut 4000)
+ * @returns {Promise<{ url: string, title: string, content: string }>}
  */
 async function fetchWebPage(url, { timeoutMs = 10000, maxChars = 4000 } = {}) {
     let parsed;

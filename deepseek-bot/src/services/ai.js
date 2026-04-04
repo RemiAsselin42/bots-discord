@@ -1,9 +1,17 @@
-const axios = require("axios");
+// axios@1.x expose ses méthodes directement en CJS mais TS voit le type ESM (module namespace).
+// On normalise vers AxiosStatic via .default pour que les types soient corrects.
+/** @type {import('axios').AxiosStatic} */
+const axios = /** @type {any} */ (require("axios")).default ?? require("axios");
 const { DEEPSEEK_API_KEY, DEEPSEEK_API_URL, SUMMARY_THRESHOLD } = require("../config");
 const db = require("../data/db");
 
 // ─── Appel générique DeepSeek ─────────────────────────────────────────────────
 
+/**
+ * @param {unknown[]} messages
+ * @param {{ signal?: AbortSignal, timeout?: number }} [options]
+ * @returns {Promise<import('axios').AxiosResponse>}
+ */
 async function callDeepSeek(messages, { signal, timeout = 30000 } = {}) {
     return axios.post(
         DEEPSEEK_API_URL,
