@@ -23,6 +23,8 @@ _NOTIFY_POLL_INTERVAL = 10   # secondes entre chaque check EC2 lors du démarrag
 _NOTIFY_TIMEOUT = 300        # 5 minutes max d'attente avant abandon
 _SSH_READY_RETRIES = 12      # tentatives max pour attendre que SSH soit dispo (12 × 5s = 60s)
 _SSH_READY_INTERVAL = 5      # secondes entre chaque tentative SSH
+_RCON_READY_RETRIES = 18     # tentatives max pour attendre que RCON soit dispo (18 × 10s = 180s)
+_RCON_READY_INTERVAL = 10    # secondes entre chaque tentative RCON
 _AUTO_STOP_INTERVAL = 300    # intervalle de la boucle auto-stop (5 minutes)
 _DEFAULT_IDLE_TIMEOUT = 30   # minutes d'inactivité avant arrêt automatique
 
@@ -51,6 +53,7 @@ async def notify_server_ready(
         get_instance_public_ip,
         update_duckdns,
         start_minecraft_process,
+        check_rcon_ready,
         ssh_execute,
         MC_SERVER_USER,
         MC_SERVER_KEY_PATH,
@@ -139,17 +142,38 @@ async def notify_server_ready(
             mc_error = mc_output
             logger.error("Démarrage Minecraft [%s] échoué : %s", server_name, mc_output)
 
+    # ── Phase 4bis : attendre que RCON soit opérationnel ───────────────────
+    rcon_ready = False
+    if mc_started:
+        for attempt in range(_RCON_READY_RETRIES):
+            rcon_ok, _ = await asyncio.to_thread(
+                check_rcon_ready, server_key, host=ssh_host
+            )
+            if rcon_ok:
+                rcon_ready = True
+                break
+            logger.debug("RCON pas encore prêt [%s] tentative %d/%d", server_name, attempt + 1, _RCON_READY_RETRIES)
+            await asyncio.sleep(_RCON_READY_INTERVAL)
+
     # ── Phase 5 : notifier dans Discord ─────────────────────────────────────
     channel = bot.get_channel(channel_id)
     if not channel:
         return
 
-    if mc_started:
+    if rcon_ready:
         extra = ""
         if not duckdns_ok:
             extra = "\n:warning: La mise à jour DuckDNS a échoué — vérifiez le token/domaine."
         await channel.send(
             f":white_check_mark: Le serveur **{server_name}** est prêt ! Utilisez `/ip` pour obtenir l'adresse.{extra}"
+        )
+    elif mc_started:
+        # Java lancé mais RCON n'a pas répondu dans le délai imparti
+        _rcon_timeout_minutes = _RCON_READY_RETRIES * _RCON_READY_INTERVAL // 60
+        await channel.send(
+            f":warning: Le serveur **{server_name}** : le processus Minecraft a démarré mais RCON "
+            f"n'est pas disponible après {_rcon_timeout_minutes} minutes. "
+            "Le serveur est peut-être encore en chargement ou a planté."
         )
     elif not ssh_ready:
         await channel.send(

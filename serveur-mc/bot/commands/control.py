@@ -121,10 +121,15 @@ def setup(tree: app_commands.CommandTree) -> None:
         await interaction.response.defer()
         success, output = await asyncio.to_thread(ssh_helper.stop_minecraft_server, server)
         if not success:
-            await interaction.followup.send(
-                f":x: Impossible d'arrêter le serveur **{name}** :\n```\n{output}\n```",
-                ephemeral=True,
-            )
+            if "Connection refused" in output or "Error 111" in output:
+                msg = (
+                    f":x: Impossible d'arrêter le serveur **{name}** : "
+                    "le serveur Minecraft ne répond pas (RCON refusé).\n"
+                    "Il est peut-être encore en cours de démarrage — réessayez dans quelques secondes."
+                )
+            else:
+                msg = f":x: Impossible d'arrêter le serveur **{name}** :\n```\n{output}\n```"
+            await interaction.followup.send(msg, ephemeral=True)
             return
 
         # Vérifier si d'autres serveurs MC tournent sur la même instance

@@ -20,6 +20,7 @@ MC_SERVER_INSTANCE_ID = os.getenv("MC_SERVER_INSTANCE_ID", "")
 MC_SERVER_REGION = os.getenv("MC_SERVER_REGION", "eu-north-1")
 MC_SERVER_USER = os.getenv("MC_SERVER_USER", "ec2-user")
 MC_SERVER_KEY_PATH = os.getenv("MC_SERVER_KEY_PATH", "")
+MC_MCRCON_PATH = os.getenv("MC_MCRCON_PATH", "/usr/local/bin/mcrcon")
 MC_SERVER_JAR_URL = os.getenv(
     "MC_SERVER_JAR_URL",
     "https://piston-data.mojang.com/v1/objects/"
@@ -253,6 +254,37 @@ pgrep -af "minecraft-servers/.*/server.jar" | grep -v "minecraft-servers/{exclud
     return (True, running)
 
 
+def check_rcon_ready(
+    server_key: str,
+    *,
+    host: str | None = None,
+    user: str | None = None,
+    key_path: str | None = None,
+) -> tuple[bool, str]:
+    """Teste si RCON répond en envoyant 'list' via mcrcon.
+
+    Returns:
+        (True, output) si RCON répond, (False, erreur) sinon.
+    """
+    _user = user or MC_SERVER_USER
+    _key_path = key_path or MC_SERVER_KEY_PATH
+
+    if not _key_path:
+        return (False, "Variable MC_SERVER_KEY_PATH requise.")
+    try:
+        _host = _resolve_host(host)
+    except Exception as e:
+        return (False, f"Impossible de résoudre l'hôte SSH : {e}")
+
+    command = f"""
+PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
+RCON_PORT=$(grep '^rcon.port=' "$PROPS" | cut -d= -f2)
+RCON_PASS=$(grep '^rcon.password=' "$PROPS" | cut -d= -f2)
+{MC_MCRCON_PATH} -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" list
+"""
+    return ssh_execute(_host, _user, _key_path, command, timeout=10)
+
+
 def stop_minecraft_server(
     server_key: str,
     *,
@@ -287,7 +319,7 @@ if [ ! -f "$PROPS" ]; then
 fi
 RCON_PORT=$(grep '^rcon.port=' "$PROPS" | cut -d= -f2)
 RCON_PASS=$(grep '^rcon.password=' "$PROPS" | cut -d= -f2)
-/usr/local/bin/mcrcon -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop
+{MC_MCRCON_PATH} -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop
 """
     return ssh_execute(_host, _user, _key_path, command)
 
