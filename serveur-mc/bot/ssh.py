@@ -434,13 +434,17 @@ RCON_PORT=$(grep '^rcon.port=' "$PROPS" | cut -d= -f2)
 RCON_PASS=$(grep '^rcon.password=' "$PROPS" | cut -d= -f2)
 
 if [ -x "{MC_MCRCON_PATH}" ]; then
-    "{MC_MCRCON_PATH}" -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop
-    exit $?
+    if "{MC_MCRCON_PATH}" -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop; then
+        exit 0
+    fi
+    echo "RCON stop failed via {MC_MCRCON_PATH}, fallback process stop." >&2
 fi
 
 if command -v mcrcon > /dev/null 2>&1; then
-    mcrcon -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop
-    exit $?
+    if mcrcon -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop; then
+        exit 0
+    fi
+    echo "RCON stop failed via mcrcon, fallback process stop." >&2
 fi
 
 # Fallback si mcrcon n'est pas disponible : arrêt par signal process.
@@ -590,17 +594,32 @@ def setup_minecraft_server(
 set -e
 mkdir -p {server_dir}
 
+    PROPS_FILE="{server_dir}/server.properties"
+    RCON_PORT_DEFAULT="{rcon_port}"
+    RCON_PASS_DEFAULT="{rcon_password}"
+
+    if [ -f "$PROPS_FILE" ]; then
+        EXISTING_RCON_PORT=$(grep '^rcon.port=' "$PROPS_FILE" | cut -d= -f2 || true)
+        EXISTING_RCON_PASS=$(grep '^rcon.password=' "$PROPS_FILE" | cut -d= -f2 || true)
+        if [ -n "$EXISTING_RCON_PORT" ]; then
+            RCON_PORT_DEFAULT="$EXISTING_RCON_PORT"
+        fi
+        if [ -n "$EXISTING_RCON_PASS" ]; then
+            RCON_PASS_DEFAULT="$EXISTING_RCON_PASS"
+        fi
+    fi
+
 if [ ! -f {server_dir}/server.jar ]; then
     wget -q "{_jar_url}" -O {server_dir}/server.jar
 fi
 
 echo "eula=true" > {server_dir}/eula.txt
 
-cat > {server_dir}/server.properties <<'PROPS'
+    cat > "$PROPS_FILE" <<PROPS
 server-port={port}
 enable-rcon=true
-rcon.port={rcon_port}
-rcon.password={rcon_password}
+    rcon.port=${{RCON_PORT_DEFAULT}}
+    rcon.password=${{RCON_PASS_DEFAULT}}
 enable-query=true
 query.port={port}
 max-players=20
