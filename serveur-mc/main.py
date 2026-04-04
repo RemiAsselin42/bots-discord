@@ -7,7 +7,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 from bot.commands import admin, control, info, stats
-from bot.ssh import setup_host_instance
+from bot.minecraft_process import setup_host_instance
 from bot.tasks import auto_stop_loop
 
 logging.basicConfig(
