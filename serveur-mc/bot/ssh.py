@@ -227,9 +227,45 @@ if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
     echo "Already running"
     exit 0
 fi
-echo "eula=true" > eula.txt
+if ! command -v java > /dev/null 2>&1; then
+    echo "Java introuvable sur l'instance."
+    exit 1
+fi
+
+# Bootstrap EULA : si absent/non valide, on fait un premier lancement
+# pour laisser Minecraft générer ses fichiers, puis on active eula=true.
+if [ ! -f eula.txt ] || ! grep -q '^eula=true$' eula.txt; then
+    setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > bootstrap.log 2>&1 &
+    BOOT_PID=$!
+    sleep 6
+
+    # Si le processus n'a pas quitté tout seul, on l'arrête pour enchaîner.
+    if kill -0 "$BOOT_PID" 2>/dev/null; then
+        kill -TERM "$BOOT_PID" || true
+        sleep 2
+        if kill -0 "$BOOT_PID" 2>/dev/null; then
+            kill -KILL "$BOOT_PID" || true
+        fi
+    fi
+
+    if [ -f eula.txt ]; then
+        if grep -q '^eula=' eula.txt; then
+            sed -i 's/^eula=.*/eula=true/' eula.txt
+        else
+            echo 'eula=true' >> eula.txt
+        fi
+    else
+        echo 'eula=true' > eula.txt
+    fi
+fi
+
 setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
 sleep 2
+if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    echo "Le processus Minecraft a quitté juste après le démarrage."
+    [ -f stdout.log ] && tail -n 80 stdout.log || true
+    exit 1
+fi
 echo "Started PID $!"
 """
     return ssh_execute(_host, _user, _key_path, command, timeout=30)
@@ -299,10 +335,37 @@ def check_rcon_ready(
         return (False, f"Impossible de résoudre l'hôte SSH : {e}")
 
     command = f"""
+set -e
 PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
+SERVER_DIR="/home/{_user}/minecraft-servers/{server_key}"
+if [ ! -f "$PROPS" ]; then
+    echo "Fichier server.properties introuvable : $PROPS"
+    exit 1
+fi
+
 RCON_PORT=$(grep '^rcon.port=' "$PROPS" | cut -d= -f2)
 RCON_PASS=$(grep '^rcon.password=' "$PROPS" | cut -d= -f2)
-{MC_MCRCON_PATH} -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" list
+
+if [ -x "{MC_MCRCON_PATH}" ]; then
+    "{MC_MCRCON_PATH}" -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" list
+    exit $?
+fi
+
+if command -v mcrcon > /dev/null 2>&1; then
+    mcrcon -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" list
+    exit $?
+fi
+
+# Fallback : si mcrcon est absent, tester au moins l'ouverture du port RCON.
+if timeout 2 bash -c "cat < /dev/null > /dev/tcp/127.0.0.1/$RCON_PORT" 2>/dev/null; then
+    echo "RCON port ouvert (mcrcon absent)"
+    exit 0
+fi
+
+echo "RCON indisponible et mcrcon absent."
+[ -f "$SERVER_DIR/logs/latest.log" ] && tail -n 30 "$SERVER_DIR/logs/latest.log" || true
+[ -f "$SERVER_DIR/stdout.log" ] && tail -n 30 "$SERVER_DIR/stdout.log" || true
+exit 1
 """
     return ssh_execute(_host, _user, _key_path, command, timeout=10)
 
@@ -341,7 +404,30 @@ if [ ! -f "$PROPS" ]; then
 fi
 RCON_PORT=$(grep '^rcon.port=' "$PROPS" | cut -d= -f2)
 RCON_PASS=$(grep '^rcon.password=' "$PROPS" | cut -d= -f2)
-{MC_MCRCON_PATH} -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop
+
+if [ -x "{MC_MCRCON_PATH}" ]; then
+    "{MC_MCRCON_PATH}" -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop
+    exit $?
+fi
+
+if command -v mcrcon > /dev/null 2>&1; then
+    mcrcon -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop
+    exit $?
+fi
+
+# Fallback si mcrcon n'est pas disponible : arrêt par signal process.
+PID=$(pgrep -f "minecraft-servers/{server_key}/server.jar" | head -n 1 || true)
+if [ -z "$PID" ]; then
+    echo "Serveur déjà arrêté (aucun PID trouvé)."
+    exit 0
+fi
+
+kill -TERM "$PID"
+sleep 8
+if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || true
+fi
+echo "Serveur arrêté sans mcrcon (fallback process)."
 """
     return ssh_execute(_host, _user, _key_path, command)
 
