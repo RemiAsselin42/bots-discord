@@ -473,8 +473,10 @@ FIRST_PID=$(echo "$PIDS_BEFORE" | awk '{{print $1}}')
 PID_USER=$(ps -o user= -p "$FIRST_PID" 2>/dev/null | tr -d ' ' || true)
 echo "Fallback stop sur PID(s): $PIDS_BEFORE (owner principal: ${{PID_USER:-unknown}})"
 
-# 1) TERM global
-pkill -TERM -f "minecraft-servers/{server_key}/server.jar" || sudo -n pkill -TERM -f "minecraft-servers/{server_key}/server.jar" || true
+# 1) TERM ciblé (évite de tuer le shell courant par motif)
+for pid in $PIDS_BEFORE; do
+    kill -TERM "$pid" || sudo -n kill -TERM "$pid" || true
+done
 
 # Attendre jusqu'à 15s l'arrêt propre
 for _ in 1 2 3 4 5; do
@@ -485,8 +487,11 @@ for _ in 1 2 3 4 5; do
     sleep 3
 done
 
-# 2) KILL forcé
-pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || sudo -n pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || true
+# 2) KILL forcé sur PID restants uniquement
+PIDS_AFTER_TERM=$(pgrep -f "minecraft-servers/{server_key}/server.jar" | tr '\n' ' ' || true)
+for pid in $PIDS_AFTER_TERM; do
+    kill -KILL "$pid" || sudo -n kill -KILL "$pid" || true
+done
 sleep 1
 
 if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
