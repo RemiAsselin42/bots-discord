@@ -1,4 +1,8 @@
+import functools
 import re
+from typing import Any, Callable, Coroutine, TypeVar
+
+import discord
 
 
 def is_valid_instance_id(instance_id: str | None) -> bool:
@@ -30,3 +34,32 @@ def format_uptime(seconds: int) -> str:
         parts.append(f"{minutes}min")
 
     return " ".join(parts)
+
+
+def resolve_duckdns_host(domain: str) -> str:
+    """Retourne le FQDN DuckDNS complet (ajoute '.duckdns.org' si nécessaire)."""
+    return domain if "." in domain else f"{domain}.duckdns.org"
+
+
+F = TypeVar("F", bound=Callable[..., Coroutine[Any, Any, None]])
+
+
+def require_guild(func: F) -> F:
+    """Décorateur qui bloque un app_command utilisé hors d'un serveur Discord.
+
+    Préserve __annotations__ pour que discord.py puisse inspecter les paramètres
+    slash et les enregistrer correctement.
+    """
+
+    @functools.wraps(func)
+    async def wrapper(interaction: discord.Interaction, *args: Any, **kwargs: Any) -> None:
+        if not interaction.guild:
+            await interaction.response.send_message(
+                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.",
+                ephemeral=True,
+            )
+            return
+        await func(interaction, *args, **kwargs)
+
+    wrapper.__annotations__ = func.__annotations__  # type: ignore[attr-defined]
+    return wrapper  # type: ignore[return-value]
