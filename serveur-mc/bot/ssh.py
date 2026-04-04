@@ -4,6 +4,7 @@ Supporte les formats de clé RSA PEM et OpenSSH (ainsi que ECDSA, Ed25519, DSS).
 """
 import logging
 import os
+import re
 import secrets
 import string
 import threading
@@ -147,6 +148,111 @@ async def get_jar_url_for_version(version_id: str) -> str:
     return version_manifest["downloads"]["server"]["url"]
 
 
+async def update_duckdns(domain: str, token: str, ip: str) -> bool:
+    """Met à jour l'enregistrement DuckDNS avec la nouvelle IP publique EC2.
+
+    domain: sous-domaine seul (ex: 'minecraft-serveur'), sans '.duckdns.org'
+    token:  token DuckDNS
+    ip:     IP publique à enregistrer
+    Returns True si la mise à jour a réussi.
+    """
+    subdomain = domain.split(".")[0] if "." in domain else domain
+    url = f"https://www.duckdns.org/update?domains={subdomain}&token={token}&ip={ip}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                body = await resp.text()
+                success = body.strip().upper() == "OK"
+                if success:
+                    logger.info("DuckDNS mis à jour : %s → %s", subdomain, ip)
+                else:
+                    logger.warning("DuckDNS réponse inattendue : %r", body)
+                return success
+    except Exception as e:
+        logger.error("Erreur mise à jour DuckDNS : %s", e)
+        return False
+
+
+def start_minecraft_process(
+    server_key: str,
+    *,
+    max_ram: str = "1.5G",
+    min_ram: str = "1G",
+    host: str | None = None,
+    user: str | None = None,
+    key_path: str | None = None,
+) -> tuple[bool, str]:
+    """Lance le processus Java Minecraft pour un serveur donné via SSH.
+
+    Idempotent : si le processus tourne déjà, retourne succès sans le relancer.
+    Returns:
+        (success, message)
+    """
+    _user = user or MC_SERVER_USER
+    _key_path = key_path or MC_SERVER_KEY_PATH
+
+    if not _key_path:
+        return (False, "Variable MC_SERVER_KEY_PATH requise.")
+    try:
+        _host = _resolve_host(host)
+    except Exception as e:
+        return (False, f"Impossible de résoudre l'hôte SSH : {e}")
+
+    command = f"""
+set -e
+cd /home/{_user}/minecraft-servers/{server_key}
+if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    echo "Already running"
+    exit 0
+fi
+nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui > stdout.log 2>&1 &
+sleep 1
+echo "Started PID $!"
+"""
+    return ssh_execute(_host, _user, _key_path, command, timeout=30)
+
+
+def check_other_mc_servers_running(
+    exclude_server_key: str,
+    *,
+    host: str | None = None,
+    user: str | None = None,
+    key_path: str | None = None,
+) -> tuple[bool, list[str]]:
+    """Vérifie si d'autres serveurs Minecraft tournent sur la même instance.
+
+    exclude_server_key: le server_key à ignorer (celui qu'on vient d'arrêter)
+    Returns:
+        (success, list[str]) — liste des server_keys encore actifs (hors exclu)
+    """
+    _user = user or MC_SERVER_USER
+    _key_path = key_path or MC_SERVER_KEY_PATH
+
+    if not _key_path:
+        return (False, [])
+    try:
+        _host = _resolve_host(host)
+    except Exception as e:
+        logger.warning("check_other_mc_servers_running : impossible de résoudre l'hôte : %s", e)
+        return (False, [])
+
+    command = f"""
+pgrep -af "minecraft-servers/.*/server.jar" | grep -v "minecraft-servers/{exclude_server_key}/" || true
+"""
+    success, output = ssh_execute(_host, _user, _key_path, command, timeout=15)
+    if not success:
+        return (False, [])
+
+    running = []
+    for line in output.splitlines():
+        match = re.search(r"minecraft-servers/([^/]+)/server\.jar", line)
+        if match:
+            key = match.group(1)
+            if key != exclude_server_key and key not in running:
+                running.append(key)
+    return (True, running)
+
+
 def stop_minecraft_server(
     server_key: str,
     *,
@@ -255,7 +361,13 @@ mkdir -p /home/{_user}/minecraft-servers
             f"grep -qF 'DUCKDNS_DOMAIN' ~/.bashrc || "
             f"echo 'export DUCKDNS_DOMAIN={duckdns_domain}' >> ~/.bashrc\n"
             f"grep -qF 'DUCKDNS_TOKEN' ~/.bashrc || "
-            f"echo 'export DUCKDNS_TOKEN={duckdns_token}' >> ~/.bashrc"
+            f"echo 'export DUCKDNS_TOKEN={duckdns_token}' >> ~/.bashrc\n"
+            # duck.sh lit ~/.env (lu par cron) — on y écrit aussi
+            f"touch ~/.env\n"
+            f"grep -qF 'DUCKDNS_DOMAIN' ~/.env || "
+            f"echo 'DUCKDNS_DOMAIN={duckdns_domain}' >> ~/.env\n"
+            f"grep -qF 'DUCKDNS_TOKEN' ~/.env || "
+            f"echo 'DUCKDNS_TOKEN={duckdns_token}' >> ~/.env"
         )
 
     post_cmd = f"""

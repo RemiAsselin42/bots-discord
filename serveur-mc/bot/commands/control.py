@@ -8,6 +8,17 @@ from bot.aws import format_boto_error, get_ec2_client
 from bot.config import get_server_config, load_config
 from bot.permissions import check_permission
 from bot import ssh as ssh_helper
+from bot.tasks import notify_server_ready
+
+
+def _get_instance_state(instance_id: str, region: str) -> str | None:
+    """Retourne l'état courant de l'instance EC2 ou None en cas d'erreur."""
+    try:
+        ec2 = get_ec2_client(region)
+        resp = ec2.describe_instances(InstanceIds=[instance_id])
+        return resp["Reservations"][0]["Instances"][0]["State"]["Name"]
+    except Exception:
+        return None
 
 
 def setup(tree: app_commands.CommandTree) -> None:
@@ -49,14 +60,18 @@ def setup(tree: app_commands.CommandTree) -> None:
         region = server_config.get("region", "eu-north-1")
 
         try:
+            current_state = await asyncio.to_thread(_get_instance_state, instance_id, region)
             ec2 = get_ec2_client(region)
-            ec2.start_instances(InstanceIds=[instance_id])
-            await interaction.response.send_message(
-                f":green_circle: Le serveur **{name}** est en cours de démarrage… "
-                "Je vous notifie dès qu'il est prêt !"
-            )
-            # Lance le polling en arrière-plan — notifie dans ce même salon
-            from bot.tasks import notify_server_ready
+
+            if current_state not in ("running", "pending"):
+                ec2.start_instances(InstanceIds=[instance_id])
+                status_msg = f":green_circle: Le serveur **{name}** est en cours de démarrage… Je vous notifie dès qu'il est prêt !"
+            else:
+                status_msg = f":arrows_counterclockwise: Le serveur **{name}** est déjà actif — lancement du processus Minecraft…"
+
+            await interaction.response.send_message(status_msg)
+
+            # Lance le pipeline complet en arrière-plan : EC2 poll → DuckDNS → SSH → Java
             asyncio.create_task(
                 notify_server_ready(
                     bot=interaction.client,
@@ -64,6 +79,8 @@ def setup(tree: app_commands.CommandTree) -> None:
                     server_name=name,
                     instance_id=instance_id,
                     region=region,
+                    server_key=server,
+                    server_config=server_config,
                 )
             )
         except Exception as e:
@@ -98,15 +115,61 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         name = server_config.get("name", server)
+        instance_id = server_config.get("instance_id")
+        region = server_config.get("region", "eu-north-1")
 
         await interaction.response.defer()
         success, output = await asyncio.to_thread(ssh_helper.stop_minecraft_server, server)
-        if success:
-            await interaction.followup.send(f":red_circle: Le serveur Minecraft **{name}** a été arrêté.")
-        else:
+        if not success:
             await interaction.followup.send(
                 f":x: Impossible d'arrêter le serveur **{name}** :\n```\n{output}\n```",
                 ephemeral=True,
+            )
+            return
+
+        # Vérifier si d'autres serveurs MC tournent sur la même instance
+        # On passe ssh_host explicitement pour les contextes multi-instances
+        ssh_host = server_config.get("ssh_host") or None
+        check_success, running_others = await asyncio.to_thread(
+            ssh_helper.check_other_mc_servers_running, server, host=ssh_host
+        )
+
+        if not check_success:
+            # SSH indisponible : on ne peut pas déterminer l'état des autres serveurs
+            # → on conserve l'instance EC2 par précaution
+            await interaction.followup.send(
+                f":red_circle: Le serveur **{name}** a été arrêté.\n"
+                ":warning: Impossible de vérifier les autres serveurs actifs (SSH injoignable) — "
+                "l'instance EC2 est conservée par précaution."
+            )
+            return
+
+        if running_others:
+            others_str = ", ".join(f"`{k}`" for k in running_others)
+            await interaction.followup.send(
+                f":red_circle: Le serveur **{name}** a été arrêté.\n"
+                f":information_source: D'autres serveurs sont encore actifs ({others_str}) — l'instance EC2 reste en marche."
+            )
+            return
+
+        # Aucun autre serveur actif → arrêt de l'instance EC2
+        if isinstance(instance_id, str) and instance_id.startswith("i-"):
+            try:
+                ec2 = get_ec2_client(region)
+                ec2.stop_instances(InstanceIds=[instance_id])
+                await interaction.followup.send(
+                    f":red_circle: Le serveur **{name}** a été arrêté. "
+                    "Aucun autre serveur actif — l'instance EC2 est en cours d'arrêt."
+                )
+            except Exception as e:
+                await interaction.followup.send(
+                    f":red_circle: Le serveur **{name}** a été arrêté.\n"
+                    ":warning: Impossible d'arrêter l'instance EC2 : "
+                    + format_boto_error(e, action="arrêter l'instance", instance_id=instance_id, region=region)
+                )
+        else:
+            await interaction.followup.send(
+                f":red_circle: Le serveur Minecraft **{name}** a été arrêté."
             )
 
     @tree.command(name="status", description="Vérifie le statut du serveur Minecraft")
