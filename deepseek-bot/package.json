@@ -12,7 +12,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test tests/db.forget.test.js tests/ai.index.test.js",
+    "test": "node --test tests/db.forget.test.js tests/ai.index.test.js tests/webFetch.test.js tests/queue.test.js",
     "lint": "eslint .",
     "type-check": "tsc -p tsconfig.typecheck.json",
     "stop": "pm2 stop discord-bot",
