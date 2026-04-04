@@ -206,8 +206,8 @@ if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
     echo "Already running"
     exit 0
 fi
-nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui > stdout.log 2>&1 &
-sleep 1
+setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
+sleep 2
 echo "Started PID $!"
 """
     return ssh_execute(_host, _user, _key_path, command, timeout=30)
