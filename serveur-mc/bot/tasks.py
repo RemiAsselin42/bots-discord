@@ -23,7 +23,7 @@ _NOTIFY_POLL_INTERVAL = 10   # secondes entre chaque check EC2 lors du démarrag
 _NOTIFY_TIMEOUT = 300        # 5 minutes max d'attente avant abandon
 _SSH_READY_RETRIES = 12      # tentatives max pour attendre que SSH soit dispo (12 × 5s = 60s)
 _SSH_READY_INTERVAL = 5      # secondes entre chaque tentative SSH
-_RCON_READY_RETRIES = 18     # tentatives max pour attendre que RCON soit dispo (18 × 10s = 180s)
+_RCON_READY_RETRIES = 60     # tentatives max pour attendre que RCON soit dispo (60 × 10s = 600s)
 _RCON_READY_INTERVAL = 10    # secondes entre chaque tentative RCON
 _AUTO_STOP_INTERVAL = 300    # intervalle de la boucle auto-stop (5 minutes)
 _DEFAULT_IDLE_TIMEOUT = 30   # minutes d'inactivité avant arrêt automatique
@@ -146,8 +146,10 @@ async def notify_server_ready(
     rcon_ready = False
     rcon_error = ""
     process_exited_during_rcon = False
+    rcon_retries = int(server_config.get("rcon_ready_retries", _RCON_READY_RETRIES))
+    rcon_interval = int(server_config.get("rcon_ready_interval", _RCON_READY_INTERVAL))
     if mc_started:
-        for attempt in range(_RCON_READY_RETRIES):
+        for attempt in range(rcon_retries):
             rcon_ok, rcon_output = await asyncio.to_thread(
                 check_rcon_ready, server_key, host=ssh_host
             )
@@ -159,8 +161,8 @@ async def notify_server_ready(
                 process_exited_during_rcon = True
                 logger.error("Minecraft process exited during RCON checks [%s]", server_name)
                 break
-            logger.debug("RCON pas encore prêt [%s] tentative %d/%d", server_name, attempt + 1, _RCON_READY_RETRIES)
-            await asyncio.sleep(_RCON_READY_INTERVAL)
+            logger.debug("RCON pas encore prêt [%s] tentative %d/%d", server_name, attempt + 1, rcon_retries)
+            await asyncio.sleep(rcon_interval)
 
     # ── Phase 5 : notifier dans Discord ─────────────────────────────────────
     channel = bot.get_channel(channel_id)
@@ -182,7 +184,7 @@ async def notify_server_ready(
             )
         else:
             # Java lancé mais RCON n'a pas répondu dans le délai imparti
-            _rcon_timeout_minutes = _RCON_READY_RETRIES * _RCON_READY_INTERVAL // 60
+            _rcon_timeout_minutes = rcon_retries * rcon_interval // 60
             await channel.send(
                 f":warning: Le serveur **{server_name}** : le processus Minecraft a démarré mais RCON "
                 f"n'est pas disponible après {_rcon_timeout_minutes} minutes. "
