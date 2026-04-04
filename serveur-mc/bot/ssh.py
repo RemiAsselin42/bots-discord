@@ -471,18 +471,18 @@ def setup_minecraft_server(
     rcon_port = port + 10
     rcon_password = generate_rcon_password()
 
+    server_dir = f"/home/{_user}/minecraft-servers/{server_key}"
     command = f"""
 set -e
-mkdir -p /home/ec2-user/minecraft-servers/{server_key}
-cd /home/ec2-user/minecraft-servers/{server_key}
+mkdir -p {server_dir}
 
-if [ ! -f server.jar ]; then
-    wget -q "{_jar_url}" -O server.jar
+if [ ! -f {server_dir}/server.jar ]; then
+    wget -q "{_jar_url}" -O {server_dir}/server.jar
 fi
 
-echo "eula=true" > eula.txt
+echo "eula=true" > {server_dir}/eula.txt
 
-cat > server.properties <<'PROPS'
+cat > {server_dir}/server.properties <<'PROPS'
 server-port={port}
 enable-rcon=true
 rcon.port={rcon_port}
