@@ -433,16 +433,31 @@ fi
 RCON_PORT=$(grep '^rcon.port=' "$PROPS" | cut -d= -f2)
 RCON_PASS=$(grep '^rcon.password=' "$PROPS" | cut -d= -f2)
 
+if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    echo "Serveur déjà arrêté (aucun PID trouvé)."
+    exit 0
+fi
+
 if [ -x "{MC_MCRCON_PATH}" ]; then
     if "{MC_MCRCON_PATH}" -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop; then
-        exit 0
+        sleep 3
+        if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+            echo "Serveur arrêté via RCON ({MC_MCRCON_PATH})."
+            exit 0
+        fi
+        echo "RCON stop envoyé mais process encore actif, fallback process stop." >&2
     fi
     echo "RCON stop failed via {MC_MCRCON_PATH}, fallback process stop." >&2
 fi
 
 if command -v mcrcon > /dev/null 2>&1; then
     if mcrcon -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop; then
-        exit 0
+        sleep 3
+        if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+            echo "Serveur arrêté via RCON (mcrcon)."
+            exit 0
+        fi
+        echo "RCON stop envoyé mais process encore actif, fallback process stop." >&2
     fi
     echo "RCON stop failed via mcrcon, fallback process stop." >&2
 fi
@@ -454,12 +469,20 @@ if [ -z "$PID" ]; then
     exit 0
 fi
 
-kill -TERM "$PID"
+kill -TERM "$PID" || true
 sleep 8
 if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
     pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || true
+    sleep 1
 fi
+
+if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    echo "Impossible d'arrêter le processus Minecraft même après fallback." >&2
+    exit 1
+fi
+
 echo "Serveur arrêté sans mcrcon (fallback process)."
+exit 0
 """
     return ssh_execute(_host, _user, _key_path, command)
 
