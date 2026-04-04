@@ -462,30 +462,41 @@ if command -v mcrcon > /dev/null 2>&1; then
     echo "RCON stop failed via mcrcon, fallback process stop." >&2
 fi
 
-# Fallback si mcrcon n'est pas disponible : arrêt par signal process.
-PID=$(pgrep -f "minecraft-servers/{server_key}/server.jar" | head -n 1 || true)
-if [ -z "$PID" ]; then
+# Fallback process stop : on tue tous les PID correspondant au serveur.
+PIDS_BEFORE=$(pgrep -f "minecraft-servers/{server_key}/server.jar" | tr '\n' ' ' || true)
+if [ -z "$PIDS_BEFORE" ]; then
     echo "Serveur déjà arrêté (aucun PID trouvé)."
     exit 0
 fi
 
-PID_USER=$(ps -o user= -p "$PID" 2>/dev/null | tr -d ' ' || true)
-echo "Fallback stop sur PID $PID (owner: ${{PID_USER:-unknown}})"
+FIRST_PID=$(echo "$PIDS_BEFORE" | awk '{{print $1}}')
+PID_USER=$(ps -o user= -p "$FIRST_PID" 2>/dev/null | tr -d ' ' || true)
+echo "Fallback stop sur PID(s): $PIDS_BEFORE (owner principal: ${{PID_USER:-unknown}})"
 
-# Tentative normale puis sudo (utile si le process n'appartient pas à l'utilisateur SSH).
-kill -TERM "$PID" || sudo -n kill -TERM "$PID" || true
-sleep 8
-if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
-    pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || sudo -n pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || true
-    sleep 1
-fi
+# 1) TERM global
+pkill -TERM -f "minecraft-servers/{server_key}/server.jar" || sudo -n pkill -TERM -f "minecraft-servers/{server_key}/server.jar" || true
+
+# Attendre jusqu'à 15s l'arrêt propre
+for _ in 1 2 3 4 5; do
+    if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+        echo "Serveur arrêté sans mcrcon (fallback process TERM)."
+        exit 0
+    fi
+    sleep 3
+done
+
+# 2) KILL forcé
+pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || sudo -n pkill -KILL -f "minecraft-servers/{server_key}/server.jar" || true
+sleep 1
 
 if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
-    echo "Impossible d'arrêter le processus Minecraft même après fallback." >&2
+    PIDS_AFTER=$(pgrep -af "minecraft-servers/{server_key}/server.jar" || true)
+    echo "Impossible d'arrêter le processus Minecraft même après fallback. Process restants:" >&2
+    echo "$PIDS_AFTER" >&2
     exit 1
 fi
 
-echo "Serveur arrêté sans mcrcon (fallback process)."
+echo "Serveur arrêté sans mcrcon (fallback process KILL)."
 exit 0
 """
     return ssh_execute(_host, _user, _key_path, command)
