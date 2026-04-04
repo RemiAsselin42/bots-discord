@@ -15,6 +15,16 @@ def get_cloudwatch_client(region: str):
     return boto3.client("cloudwatch", region_name=region)
 
 
+def get_instance_state(instance_id: str, region: str) -> str | None:
+    """Retourne l'état courant de l'instance EC2 ('running', 'stopped', etc.) ou None en cas d'erreur."""
+    try:
+        ec2 = get_ec2_client(region)
+        resp = ec2.describe_instances(InstanceIds=[instance_id])
+        return resp["Reservations"][0]["Instances"][0]["State"]["Name"]
+    except Exception:
+        return None
+
+
 def manage_sg_port(instance_id: str, region: str, port: int, action: str) -> None:
     """Ouvre ou ferme un port TCP dans le Security Group de l'instance EC2.
 

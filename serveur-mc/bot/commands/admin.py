@@ -8,11 +8,102 @@ from discord import app_commands
 from bot.minecraft_process import setup_minecraft_server
 from bot.mojang import get_jar_url_for_version
 from bot.autocomplete import server_autocomplete, version_autocomplete
-from bot.aws import format_boto_error, manage_sg_port
+from botocore.exceptions import ClientError
+
+from bot.aws import format_boto_error, get_ec2_client, get_instance_state, manage_sg_port
 from bot.config import load_config, save_config
 from bot.helpers import require_guild, resolve_duckdns_host, slugify_name
 from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_permission_summary
 from bot.port_manager import assign_port
+
+
+class _InstanceStartView(discord.ui.View):
+    """Boutons proposant de démarrer l'instance EC2 avant l'installation SSH."""
+
+    def __init__(
+        self,
+        *,
+        original_interaction: discord.Interaction,
+        server_key: str,
+        port: int,
+        name: str,
+        instance_id: str,
+        region: str,
+        version: str,
+    ) -> None:
+        super().__init__(timeout=120)
+        self._orig = original_interaction
+        self._server_key = server_key
+        self._port = port
+        self._name = name
+        self._instance_id = instance_id
+        self._region = region
+        self._version = version
+
+    def _disable_all(self) -> None:
+        for child in self.children:
+            child.disabled = True  # type: ignore[attr-defined]
+
+    @discord.ui.button(label="Démarrer et installer", style=discord.ButtonStyle.green, emoji="▶️")
+    async def start_and_install(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f":arrows_counterclockwise: Démarrage de l'instance `{self._instance_id}`…"
+        )
+        asyncio.create_task(self._start_then_setup(interaction))
+        self.stop()
+
+    @discord.ui.button(label="Installer plus tard", style=discord.ButtonStyle.secondary, emoji="⏭️")
+    async def install_later(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f":information_source: Installation reportée. Créez manuellement le dossier :\n"
+            f"```bash\n"
+            f"ssh ec2-user@$MC_SERVER_HOST\n"
+            f"mkdir -p ~/minecraft-servers/{self._server_key}\n"
+            f"cd ~/minecraft-servers/{self._server_key}\n"
+            f"# Ajouter server.jar, eula.txt et server.properties (port {self._port})\n"
+            f"```"
+        )
+        self.stop()
+
+    async def _start_then_setup(self, btn_interaction: discord.Interaction) -> None:
+        try:
+            ec2 = get_ec2_client(self._region)
+            await asyncio.to_thread(ec2.start_instances, InstanceIds=[self._instance_id])
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code != "IncorrectInstanceState":
+                await btn_interaction.followup.send(
+                    format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region)
+                )
+                return
+            # IncorrectInstanceState = déjà en cours de démarrage, on poll quand même
+        except Exception as e:
+            await btn_interaction.followup.send(
+                format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region)
+            )
+            return
+
+        # Poll jusqu'à "running" (max ~5 min)
+        for _ in range(30):
+            await asyncio.sleep(10)
+            state = await asyncio.to_thread(get_instance_state, self._instance_id, self._region)
+            if state == "running":
+                break
+        else:
+            await btn_interaction.followup.send(
+                f":x: L'instance `{self._instance_id}` n'est pas passée à l'état **running** après 5 minutes.\n"
+                "Relancez `/createserver` une fois l'instance démarrée."
+            )
+            return
+
+        await btn_interaction.followup.send(":white_check_mark: Instance démarrée — lancement de l'installation SSH…")
+        await _run_ssh_setup(
+            self._orig, self._server_key, self._port, self._name, self._instance_id, self._region, self._version
+        )
 
 
 def setup(tree: app_commands.CommandTree) -> None:
@@ -93,19 +184,39 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
             return
 
-        confirm = (
+        base_confirm = (
             f":white_check_mark: Serveur **{name}** enregistré avec succès !\n\n"
             f":clipboard: **Configuration :**\n"
             f"• Nom: `{name}`\n"
             f"• Port Minecraft: `{port}`\n"
             f"• RAM: `{ram_upper}`\n"
             f"• Version: `{version}`\n\n"
-            f":hourglass: **Installation en cours sur l'instance EC2...**"
         )
-        await interaction.response.send_message(confirm)
 
-        # Setup SSH en arrière-plan
-        asyncio.create_task(_run_ssh_setup(interaction, key, port, name, instance_id, region, version))
+        instance_state = await asyncio.to_thread(get_instance_state, instance_id, region)
+
+        if instance_state == "running":
+            await interaction.response.send_message(
+                base_confirm + ":hourglass: **Installation en cours sur l'instance EC2...**"
+            )
+            asyncio.create_task(_run_ssh_setup(interaction, key, port, name, instance_id, region, version))
+        else:
+            state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
+            view = _InstanceStartView(
+                original_interaction=interaction,
+                server_key=key,
+                port=port,
+                name=name,
+                instance_id=instance_id,
+                region=region,
+                version=version,
+            )
+            await interaction.response.send_message(
+                base_confirm
+                + f":warning: L'instance `{instance_id}` est actuellement {state_label}.\n"
+                "Souhaitez-vous la démarrer pour installer le serveur maintenant ?",
+                view=view,
+            )
 
     @tree.command(name="removeserver", description="Supprime un serveur Minecraft de la configuration")
     @app_commands.describe(server="Sélectionnez le serveur à supprimer")
