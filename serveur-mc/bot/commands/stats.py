@@ -1,3 +1,5 @@
+import os
+
 import discord
 from discord import app_commands
 from mcstatus import JavaServer
@@ -7,6 +9,7 @@ from bot.autocomplete import server_autocomplete
 from bot.aws import format_boto_error, get_ec2_client
 from bot.commands.helpers import get_uptime_and_cost
 from bot.config import get_server_config, load_config
+from bot.helpers import is_valid_instance_id, require_guild, resolve_duckdns_host
 
 
 def setup(tree: app_commands.CommandTree) -> None:
@@ -14,12 +17,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="cost", description="Affiche le coût réel depuis le démarrage de l'instance")
     @app_commands.describe(server="Sélectionnez le serveur")
     @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
     async def cost_command(interaction: discord.Interaction, server: str):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
@@ -33,7 +32,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         region = server_config.get("region", "eu-north-1")
         hourly_cost: float = server_config.get("hourly_cost", 0.0416)
 
-        if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
+        if not is_valid_instance_id(instance_id):
             await interaction.response.send_message(
                 ":x: L'ID d'instance configuré est invalide.", ephemeral=True
             )
@@ -67,12 +66,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="players", description="Affiche les joueurs connectés au serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur")
     @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
     async def players_command(interaction: discord.Interaction, server: str):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
@@ -83,19 +78,18 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         name = server_config.get("name", server)
         port = int(server_config.get("minecraft_port", "25565"))
-        import os
         duckdns_domain: str | None = os.getenv("DUCKDNS_DOMAIN")
 
         await interaction.response.defer()
 
         # Résolution de l'adresse du serveur
-        host = _resolve_host(duckdns_domain)
+        host = resolve_duckdns_host(duckdns_domain) if duckdns_domain else None
         if host is None:
             # Pas de DuckDNS → on récupère l'IP publique EC2
             instance_id = server_config.get("instance_id")
             region = server_config.get("region", "eu-north-1")
 
-            if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
+            if not is_valid_instance_id(instance_id):
                 await interaction.followup.send(
                     ":x: L'ID d'instance configuré est invalide. Impossible de joindre le serveur.",
                     ephemeral=True,
@@ -143,12 +137,6 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
 
         await interaction.followup.send(msg)
-
-
-def _resolve_host(duckdns_domain: str | None) -> str | None:
-    if not duckdns_domain:
-        return None
-    return duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"
 
 
 def _get_ec2_public_ip(instance_id: str, region: str, name: str, server_key: str) -> str | None:

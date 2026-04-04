@@ -5,11 +5,12 @@ import re
 import discord
 from discord import app_commands
 
-from bot import ssh as ssh_helper
+from bot.minecraft_process import setup_minecraft_server
+from bot.mojang import get_jar_url_for_version
 from bot.autocomplete import server_autocomplete, version_autocomplete
 from bot.aws import format_boto_error, manage_sg_port
 from bot.config import load_config, save_config
-from bot.helpers import slugify_name
+from bot.helpers import require_guild, resolve_duckdns_host, slugify_name
 from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_permission_summary
 from bot.port_manager import assign_port
 
@@ -25,19 +26,15 @@ def setup(tree: app_commands.CommandTree) -> None:
         version="Version de Minecraft (ex: 1.21.4, latest)",
     )
     @app_commands.autocomplete(version=version_autocomplete)
+    @require_guild
     async def createserver_command(
         interaction: discord.Interaction,
         name: str,
-        instance_id: str = "i-XXXXXXXXXXXXXXXXX",
+        instance_id: str,
         ram: str = "1536M",
         region: str = "eu-north-1",
         version: str = "latest",
     ):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -113,12 +110,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="removeserver", description="Supprime un serveur Minecraft de la configuration")
     @app_commands.describe(server="Sélectionnez le serveur à supprimer")
     @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
     async def removeserver_command(interaction: discord.Interaction, server: str):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -168,6 +161,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         hourly_cost="Nouveau coût horaire en $",
     )
     @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
     async def editserver_command(
         interaction: discord.Interaction,
         server: str,
@@ -176,11 +170,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         region: str | None = None,
         hourly_cost: float | None = None,
     ):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -242,12 +231,8 @@ def setup(tree: app_commands.CommandTree) -> None:
         role="Rôle Discord à autoriser",
     )
     @app_commands.choices(command=[app_commands.Choice(name=c, value=c) for c in CONFIGURABLE_COMMANDS])
+    @require_guild
     async def setpermission_command(interaction: discord.Interaction, command: str, role: discord.Role):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -277,12 +262,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="resetpermission", description="Remet les permissions d'une commande aux valeurs par défaut")
     @app_commands.describe(command="Commande à réinitialiser")
     @app_commands.choices(command=[app_commands.Choice(name=c, value=c) for c in CONFIGURABLE_COMMANDS])
+    @require_guild
     async def resetpermission_command(interaction: discord.Interaction, command: str):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -307,12 +288,8 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(f":x: Erreur : {e}", ephemeral=True)
 
     @tree.command(name="listpermissions", description="Affiche les permissions configurées pour ce serveur Discord")
+    @require_guild
     async def listpermissions_command(interaction: discord.Interaction):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -341,12 +318,8 @@ def setup(tree: app_commands.CommandTree) -> None:
 
     @tree.command(name="setchannel", description="Définit le canal Discord pour les notifications du bot")
     @app_commands.describe(channel="Canal où envoyer les notifications (auto-stop, etc.)")
+    @require_guild
     async def setchannel_command(interaction: discord.Interaction, channel: discord.TextChannel):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message(
@@ -380,17 +353,17 @@ async def _run_ssh_setup(
 ) -> None:
     """Lance le setup SSH et envoie un follow-up dans le canal."""
     try:
-        jar_url = await ssh_helper.get_jar_url_for_version(version)
+        jar_url = await get_jar_url_for_version(version)
     except Exception:
         jar_url = None  # Fallback sur MC_SERVER_JAR_URL par défaut
 
-    success, message = ssh_helper.setup_minecraft_server(server_key, port, jar_url=jar_url)
+    success, message = setup_minecraft_server(server_key, port, jar_url=jar_url)
 
     if success:
         duckdns_domain = os.getenv("DUCKDNS_DOMAIN")
         extra = ""
         if duckdns_domain:
-            full_domain = duckdns_domain if "." in duckdns_domain else f"{duckdns_domain}.duckdns.org"
+            full_domain = resolve_duckdns_host(duckdns_domain)
             extra = f"\nDomaine: `{full_domain}:{port}`"
 
         sg_info = ""

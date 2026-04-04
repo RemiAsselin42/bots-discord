@@ -6,8 +6,10 @@ from discord import app_commands
 from bot.autocomplete import server_autocomplete
 from bot.aws import format_boto_error, get_ec2_client
 from bot.config import get_server_config, load_config
+from bot.helpers import is_valid_instance_id, require_guild
 from bot.permissions import check_permission
-from bot import ssh as ssh_helper
+from bot.minecraft_process import check_other_mc_servers_running, stop_minecraft_server
+from bot.ssh import get_instance_public_ip
 from bot.tasks import notify_server_ready
 
 
@@ -26,12 +28,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="start", description="Démarre le serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur à démarrer")
     @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
     async def start_command(interaction: discord.Interaction, server: str):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         config = load_config()
 
@@ -49,7 +47,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         instance_id = server_config.get("instance_id")
-        if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
+        if not is_valid_instance_id(instance_id):
             await interaction.response.send_message(
                 ":x: L'ID d'instance configuré est invalide. Corrigez la configuration du serveur.",
                 ephemeral=True,
@@ -92,12 +90,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="stop", description="Arrête le serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur à arrêter")
     @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
     async def stop_command(interaction: discord.Interaction, server: str):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         config = load_config()
 
@@ -123,12 +117,12 @@ def setup(tree: app_commands.CommandTree) -> None:
         # Sinon le helper peut retomber sur MC_SERVER_INSTANCE_ID global.
         if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
             try:
-                ssh_host = await asyncio.to_thread(ssh_helper.get_instance_public_ip, instance_id, region)
+                ssh_host = await asyncio.to_thread(get_instance_public_ip, instance_id, region)
             except Exception:
                 ssh_host = None
 
         await interaction.response.defer()
-        success, output = await asyncio.to_thread(ssh_helper.stop_minecraft_server, server, host=ssh_host)
+        success, output = await asyncio.to_thread(stop_minecraft_server, server, host=ssh_host)
         if not success:
             if "Connection refused" in output or "Error 111" in output:
                 msg = (
@@ -148,7 +142,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         # Vérifier si d'autres serveurs MC tournent sur la même instance
         # On passe ssh_host explicitement pour les contextes multi-instances
         check_success, running_others = await asyncio.to_thread(
-            ssh_helper.check_other_mc_servers_running, server, host=ssh_host
+            check_other_mc_servers_running, server, host=ssh_host
         )
 
         if not check_success:
@@ -192,12 +186,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="status", description="Vérifie le statut du serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur à vérifier")
     @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
     async def status_command(interaction: discord.Interaction, server: str):
-        if not interaction.guild:
-            await interaction.response.send_message(
-                ":x: Cette commande ne peut être utilisée que dans un serveur Discord.", ephemeral=True
-            )
-            return
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
@@ -207,7 +197,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         instance_id = server_config.get("instance_id")
-        if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
+        if not is_valid_instance_id(instance_id):
             await interaction.response.send_message(
                 ":x: L'ID d'instance configuré est invalide. Corrigez la configuration du serveur.",
                 ephemeral=True,

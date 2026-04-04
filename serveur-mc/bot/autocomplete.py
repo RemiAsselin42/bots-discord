@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 
 from bot.config import get_guild_servers, load_config
-from bot.ssh import MOJANG_MANIFEST_URL, MAX_MC_VERSION, _parse_mc_version
+from bot.mojang import MOJANG_MANIFEST_URL, MAX_MC_VERSION, _parse_mc_version
 
 logger = logging.getLogger(__name__)
 

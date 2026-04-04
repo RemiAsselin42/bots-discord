@@ -1,6 +1,6 @@
 """
 Gestion des ports pour les serveurs Minecraft multi-instances.
-Plage par défaut : 25565-25574.
+Plage par défaut : 25565-25600.
 """
 
 PORT_RANGE_START = 25565
@@ -9,7 +9,7 @@ PORT_RANGE_END = 25600
 
 def get_available_port(config: dict, guild_id: int) -> int | None:
     """
-    Retourne le premier port disponible dans la plage 25565-25574 pour la guild.
+    Retourne le premier port disponible dans la plage 25565-25600 pour la guild.
     Retourne None si tous les ports sont utilisés.
     """
     guild_str = str(guild_id)

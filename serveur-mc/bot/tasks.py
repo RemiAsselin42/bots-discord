@@ -13,6 +13,7 @@ from mcstatus import JavaServer
 
 from bot.aws import get_ec2_client
 from bot.config import load_config
+from bot.helpers import is_valid_instance_id, resolve_duckdns_host
 
 logger = logging.getLogger(__name__)
 
@@ -49,15 +50,13 @@ async def notify_server_ready(
     Phase 4 : Lance le processus Java Minecraft.
     Phase 5 : Notifie dans le canal Discord.
     """
-    from bot.ssh import (
-        get_instance_public_ip,
-        update_duckdns,
-        start_minecraft_process,
-        check_rcon_ready,
-        ssh_execute,
-        MC_SERVER_USER,
+    from bot.minecraft_process import (
         MC_SERVER_KEY_PATH,
+        MC_SERVER_USER,
+        check_rcon_ready,
+        start_minecraft_process,
     )
+    from bot.ssh import get_instance_public_ip, ssh_execute, update_duckdns
 
     ec2 = get_ec2_client(region)
     elapsed = 0
@@ -242,7 +241,7 @@ async def _check_and_stop_if_idle(
     name: str = server_config.get("name", server_key)
     idle_timeout: int = server_config.get("idle_timeout_minutes", _DEFAULT_IDLE_TIMEOUT)
 
-    if not isinstance(instance_id, str) or not instance_id.startswith("i-"):
+    if not is_valid_instance_id(instance_id):
         return
 
     # 1. Vérifier que l'instance est bien running
@@ -290,7 +289,7 @@ async def _check_and_stop_if_idle(
         return
 
     # Seuil atteint : arrêt automatique
-    from bot.ssh import stop_minecraft_server, check_other_mc_servers_running
+    from bot.minecraft_process import check_other_mc_servers_running, stop_minecraft_server
 
     # Résolution de l'hôte SSH : priorité à la config par serveur
     ssh_host = server_config.get("ssh_host") or None
@@ -367,7 +366,7 @@ def _resolve_mc_host(server_config: dict, ec2_client) -> str | None:
     """
     duckdns = server_config.get("duckdns_domain") or os.getenv("DUCKDNS_DOMAIN")
     if duckdns:
-        return duckdns if "." in duckdns else f"{duckdns}.duckdns.org"
+        return resolve_duckdns_host(duckdns)
 
     # Récupération de l'IP publique EC2
     instance_id = server_config.get("instance_id")
