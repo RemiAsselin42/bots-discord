@@ -111,7 +111,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="createserver", description="Crée un nouveau serveur Minecraft avec attribution automatique de port")
     @app_commands.describe(
         name="Nom affiché du serveur",
-        instance_id="ID de l'instance EC2 AWS (ex: i-xxxxxxxxxxxxx)",
+        instance_id="ID de l'instance EC2 AWS (défaut: i-XXXXXXXXXXXXXXXXX)",
         ram="RAM allouée au serveur (ex: 2G, 1536M, 512M) — entiers uniquement",
         region="Région AWS de l'instance (ex: eu-north-1, eu-west-3, us-east-1)",
         version="Version de Minecraft (ex: 1.21.4, latest)",
