@@ -223,7 +223,8 @@ def start_minecraft_process(
     command = f"""
 set -e
 cd /home/{_user}/minecraft-servers/{server_key}
-if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    MC_PROC_PATTERN='[j]ava .*minecraft-servers/{server_key}/server.jar'
+    if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
     echo "Already running"
     exit 0
 fi
@@ -261,7 +262,7 @@ fi
 
 setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
 sleep 3
-if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
     echo "Started PID $!"
     exit 0
 fi
@@ -275,7 +276,7 @@ try_start() {{
     setsid nohup java -Xmx"$XMX" -Xms"$XMS" -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
     CAND_PID=$!
     sleep 4
-    if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
         echo "Started with fallback RAM ($XMX/$XMS) PID $CAND_PID"
         return 0
     fi
@@ -317,7 +318,7 @@ def check_other_mc_servers_running(
         return (False, [])
 
     command = f"""
-pgrep -af "minecraft-servers/.*/server.jar" | grep -v "minecraft-servers/{exclude_server_key}/" || true
+pgrep -af '[j]ava .*minecraft-servers/.*/server.jar' | grep -v "minecraft-servers/{exclude_server_key}/" || true
 """
     success, output = ssh_execute(_host, _user, _key_path, command, timeout=15)
     if not success:
@@ -359,12 +360,13 @@ def check_rcon_ready(
 set -e
 PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
 SERVER_DIR="/home/{_user}/minecraft-servers/{server_key}"
+    MC_PROC_PATTERN='[j]ava .*minecraft-servers/{server_key}/server.jar'
 if [ ! -f "$PROPS" ]; then
     echo "Fichier server.properties introuvable : $PROPS"
     exit 1
 fi
 
-if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    if ! pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
     echo "PROCESS_EXITED"
     [ -f "$SERVER_DIR/logs/latest.log" ] && tail -n 40 "$SERVER_DIR/logs/latest.log" || true
     [ -f "$SERVER_DIR/stdout.log" ] && tail -n 40 "$SERVER_DIR/stdout.log" || true
@@ -426,6 +428,7 @@ def stop_minecraft_server(
     command = f"""
 set -e
 PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
+    MC_PROC_PATTERN='[j]ava .*minecraft-servers/{server_key}/server.jar'
 if [ ! -f "$PROPS" ]; then
     echo "Fichier server.properties introuvable : $PROPS"
     exit 1
@@ -433,7 +436,7 @@ fi
 RCON_PORT=$(grep '^rcon.port=' "$PROPS" | cut -d= -f2)
 RCON_PASS=$(grep '^rcon.password=' "$PROPS" | cut -d= -f2)
 
-if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    if ! pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
     echo "Serveur déjà arrêté (aucun PID trouvé)."
     exit 0
 fi
@@ -441,7 +444,7 @@ fi
 if [ -x "{MC_MCRCON_PATH}" ]; then
     if "{MC_MCRCON_PATH}" -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop; then
         sleep 3
-        if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+        if ! pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
             echo "Serveur arrêté via RCON ({MC_MCRCON_PATH})."
             exit 0
         fi
@@ -453,7 +456,7 @@ fi
 if command -v mcrcon > /dev/null 2>&1; then
     if mcrcon -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" stop; then
         sleep 3
-        if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+        if ! pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
             echo "Serveur arrêté via RCON (mcrcon)."
             exit 0
         fi
@@ -463,7 +466,7 @@ if command -v mcrcon > /dev/null 2>&1; then
 fi
 
 # Fallback process stop : on tue tous les PID correspondant au serveur.
-PIDS_BEFORE=$(pgrep -f "minecraft-servers/{server_key}/server.jar" | tr '\n' ' ' || true)
+PIDS_BEFORE=$(pgrep -f "$MC_PROC_PATTERN" | tr '\n' ' ' || true)
 if [ -z "$PIDS_BEFORE" ]; then
     echo "Serveur déjà arrêté (aucun PID trouvé)."
     exit 0
@@ -480,7 +483,7 @@ done
 
 # Attendre jusqu'à 15s l'arrêt propre
 for _ in 1 2 3 4 5; do
-    if ! pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
+    if ! pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
         echo "Serveur arrêté sans mcrcon (fallback process TERM)."
         exit 0
     fi
@@ -488,14 +491,14 @@ for _ in 1 2 3 4 5; do
 done
 
 # 2) KILL forcé sur PID restants uniquement
-PIDS_AFTER_TERM=$(pgrep -f "minecraft-servers/{server_key}/server.jar" | tr '\n' ' ' || true)
+PIDS_AFTER_TERM=$(pgrep -f "$MC_PROC_PATTERN" | tr '\n' ' ' || true)
 for pid in $PIDS_AFTER_TERM; do
     kill -KILL "$pid" || sudo -n kill -KILL "$pid" || true
 done
 sleep 1
 
-if pgrep -f "minecraft-servers/{server_key}/server.jar" > /dev/null 2>&1; then
-    PIDS_AFTER=$(pgrep -af "minecraft-servers/{server_key}/server.jar" || true)
+if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
+    PIDS_AFTER=$(pgrep -af "$MC_PROC_PATTERN" || true)
     echo "Impossible d'arrêter le processus Minecraft même après fallback. Process restants:" >&2
     echo "$PIDS_AFTER" >&2
     exit 1
