@@ -64,7 +64,7 @@ async def test_notify_sends_when_running():
         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
         # update_duckdns est importé localement depuis bot.ssh dans notify_server_ready
         patch("bot.ssh.update_duckdns", new=AsyncMock(return_value=True)),
-        patch("bot.ssh.MC_SERVER_KEY_PATH", "/fake/key.pem"),
+        patch("bot.minecraft_process.MC_SERVER_KEY_PATH", "/fake/key.pem"),
     ):
         await notify_server_ready(
             bot=bot,
@@ -165,7 +165,7 @@ async def test_notify_rcon_timeout_after_mc_started():
         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
         # update_duckdns est importé localement depuis bot.ssh dans notify_server_ready
         patch("bot.ssh.update_duckdns", new=AsyncMock(return_value=True)),
-        patch("bot.ssh.MC_SERVER_KEY_PATH", "/fake/key.pem"),
+        patch("bot.minecraft_process.MC_SERVER_KEY_PATH", "/fake/key.pem"),
     ):
         await notify_server_ready(
             bot=bot,

@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bot.ssh import MOJANG_MANIFEST_URL, get_jar_url_for_version
+from bot.mojang import MOJANG_MANIFEST_URL, get_jar_url_for_version
 
 # ── Fixtures de données ───────────────────────────────────────────────────────
 
@@ -143,12 +143,17 @@ async def test_get_jar_url_for_snapshot():
 # ── Tests d'erreur ────────────────────────────────────────────────────────────
 
 async def test_get_jar_url_raises_for_unknown_version():
-    """Lève ValueError si la version n'existe pas dans le manifeste."""
+    """Lève ValueError si la version n'existe pas dans le manifeste.
+
+    On utilise un ID textuel non reconnu par _parse_mc_version (retourne None),
+    donc le garde Java ne se déclenche pas et l'on atteint bien la vérification
+    «version inconnue».
+    """
     session = _make_session([MANIFEST])
 
     with patch("bot.ssh.aiohttp.ClientSession", return_value=session):
         with pytest.raises(ValueError, match="inconnue"):
-            await get_jar_url_for_version("9.99.99")
+            await get_jar_url_for_version("version-inexistante")
 
 
 async def test_get_jar_url_raises_on_network_error():
