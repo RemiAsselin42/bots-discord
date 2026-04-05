@@ -196,7 +196,7 @@ async def notify_server_ready(
     else:
         await channel.send(
             f":x: Le serveur **{server_name}** : l'instance EC2 est active mais le démarrage Minecraft a échoué.\n"
-            f"```\n{mc_error[:500]}\n```"
+            f"```\n{mc_error[:1500]}\n```"
         )
 
 
