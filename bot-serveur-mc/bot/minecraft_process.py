@@ -65,9 +65,17 @@ fi
 if [ ! -f eula.txt ] || ! grep -q '^eula=true$' eula.txt; then
     setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > bootstrap.log 2>&1 &
     BOOT_PID=$!
-    sleep 6
 
-    # Si le processus n'a pas quitté tout seul, on l'arrête pour enchaîner.
+    # Attendre que le processus se termine naturellement (extraction des libs, génération eula.txt)
+    # Minecraft 1.21+ peut prendre 2-3 minutes pour décompresser ses bibliothèques.
+    BOOT_WAITED=0
+    BOOT_MAX=180
+    while kill -0 "$BOOT_PID" 2>/dev/null && [ $BOOT_WAITED -lt $BOOT_MAX ]; do
+        sleep 5
+        BOOT_WAITED=$((BOOT_WAITED + 5))
+    done
+
+    # Si toujours en cours après le délai max, forcer l'arrêt
     if kill -0 "$BOOT_PID" 2>/dev/null; then
         kill -TERM "$BOOT_PID" || true
         sleep 2
@@ -96,7 +104,7 @@ if ! pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
 fi
 echo "Serveur Minecraft démarré."
 """
-    return ssh_execute(_host, _user, _key_path, command, timeout=30)
+    return ssh_execute(_host, _user, _key_path, command, timeout=240)
 
 
 def is_minecraft_process_running(
