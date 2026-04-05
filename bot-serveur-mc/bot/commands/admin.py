@@ -121,7 +121,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
                 warning = f"\n\n:warning: Redémarrez le serveur avec `/restart {self._server_key}` pour appliquer les changements de `server.properties`."
             error_note = ("\n\n:warning: " + "\n".join(self._uuid_errors)) if self._uuid_errors else ""
             await btn_interaction.followup.send(
-                f":white_check_mark: **{self._display_name}** propriétés mises à jour :\n\n{result}{warning}{error_note}"
+                f":white_check_mark: Propriétés du serveur **{self._display_name}** mises à jour :\n{result}{warning}{error_note}"
             )
         else:
             await btn_interaction.followup.send(
