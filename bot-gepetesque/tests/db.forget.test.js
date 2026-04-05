@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "deepseek-bot-test-"));
+const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bot-gepetesque-test-"));
 process.env.BOT_DB_PATH = path.join(tempDir, "bot.test.db");
 
 const db = require("../src/data/db");

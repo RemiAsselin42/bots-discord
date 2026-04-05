@@ -1,5 +1,5 @@
 services:
-  deepseek-bot:
+  bot-gepetesque:
     build: .
     restart: always
     env_file: .env

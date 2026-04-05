@@ -86,7 +86,7 @@ docker-compose down
 docker-compose up -d --build
 
 # Voir les logs
-docker-compose logs -f deepseek-bot
+docker-compose logs -f bot-gepetesque
 ```
 
 > **Note :** `src/data/bot.db` est monté en volume pour persister la base SQLite entre les rebuilds.

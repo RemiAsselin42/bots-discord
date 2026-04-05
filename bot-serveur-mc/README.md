@@ -95,7 +95,7 @@ docker-compose up -d
 ## Architecture
 
 ```
-serveur-mc/
+bot-serveur-mc/
 ├── main.py                  # Point d'entrée : initialisation du bot et enregistrement des commandes
 ├── bot/
 │   ├── commands/
