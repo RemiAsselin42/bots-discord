@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import discord
@@ -115,18 +116,34 @@ def setup(tree: app_commands.CommandTree) -> None:
         # Vérifier que l'instance EC2 est running avant de pinger Minecraft
         instance_id = server_config.get("instance_id")
         region = server_config.get("region", "eu-north-1")
+        ec2_public_ip: str | None = None
         if is_valid_instance_id(instance_id):
             try:
                 ec2 = get_ec2_client(region)
                 resp = ec2.describe_instances(InstanceIds=[instance_id])
-                state = resp["Reservations"][0]["Instances"][0]["State"]["Name"]
+                instance_info = resp["Reservations"][0]["Instances"][0]
+                state = instance_info["State"]["Name"]
                 if state != "running":
                     await interaction.followup.send(
                         f":white_circle: **{name}** — Le serveur est arrêté (`{state}`). `0` joueur connecté."
                     )
                     return
+                ec2_public_ip = instance_info.get("PublicIpAddress")
             except Exception:
                 pass  # En cas d'erreur AWS, on tente quand même le ping
+
+        # Vérifier que le processus Java Minecraft tourne sur l'instance
+        from bot.minecraft_process import is_minecraft_process_running
+
+        ssh_host = server_config.get("ssh_host") or ec2_public_ip
+        ssh_ok, java_running = await asyncio.to_thread(
+            is_minecraft_process_running, server, host=ssh_host
+        )
+        if ssh_ok and not java_running:
+            await interaction.followup.send(
+                f":yellow_circle: **{name}** — L'instance EC2 est active mais le serveur Java est arrêté. `0` joueur connecté."
+            )
+            return
 
         # Ping Minecraft
         try:

@@ -94,6 +94,35 @@ echo "Start command dispatched PID $!"
     return ssh_execute(_host, _user, _key_path, command, timeout=30)
 
 
+def is_minecraft_process_running(
+    server_key: str,
+    *,
+    host: str | None = None,
+    user: str | None = None,
+    key_path: str | None = None,
+) -> tuple[bool, bool]:
+    """Vérifie si le processus Java Minecraft tourne pour un serveur donné.
+
+    Returns:
+        (ssh_ok, is_running) — ssh_ok=False si SSH injoignable.
+    """
+    _user = user or MC_SERVER_USER
+    _key_path = key_path or MC_SERVER_KEY_PATH
+
+    if not _key_path:
+        return (False, False)
+    try:
+        _host = _resolve_host(host)
+    except Exception:
+        return (False, False)
+
+    command = f"pgrep -f '[j]ava .*minecraft-servers/{server_key}/server.jar' > /dev/null 2>&1 && echo running || echo stopped"
+    ok, output = ssh_execute(_host, _user, _key_path, command, timeout=10)
+    if not ok:
+        return (False, False)
+    return (True, "running" in output)
+
+
 def check_other_mc_servers_running(
     exclude_server_key: str,
     *,
