@@ -63,7 +63,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
             if current_state not in ("running", "pending"):
                 ec2.start_instances(InstanceIds=[instance_id])
-                status_msg = f":green_circle: Le serveur **{name}** est en cours de démarrage… Je vous notifie dès qu'il est prêt !"
+                status_msg = f":green_circle: Démarrage du serveur **{name}**… Je vous notifie dès qu'il est prêt !"
             else:
                 status_msg = f":arrows_counterclockwise: Lancement du processus Minecraft…"
 
