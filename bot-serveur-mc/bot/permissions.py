@@ -11,6 +11,43 @@ DEFAULT_PERMISSIONS: Final[dict[str, dict]] = {
 # Commandes dont les permissions sont configurables par les admins
 CONFIGURABLE_COMMANDS: Final[list[str]] = ["start", "stop"]
 
+# Visibilité de toutes les commandes du bot (pour /listpermissions).
+# MAINTENANCE : mettre à jour cette map à chaque ajout ou suppression de commande
+# dans bot/commands/. Les entrées "configurable" doivent correspondre exactement
+# à CONFIGURABLE_COMMANDS ci-dessus.
+ALL_COMMANDS_VISIBILITY: Final[dict[str, str]] = {
+    # Configurables (permission stockée en config)
+    "start":            "configurable",
+    "stop":             "configurable",
+    # Admin uniquement
+    "restart":          "admin",
+    "createserver":     "admin",
+    "removeserver":     "admin",
+    "editserver":       "admin",
+    "setpermission":    "admin",
+    "resetpermission":  "admin",
+    "listpermissions":  "admin",
+    "setdefault":       "admin",
+    "showdefaults":     "admin",
+    "properties":       "admin",
+    "setchannel":       "admin",
+    # Publiques
+    "list":             "public",
+    "ip":               "public",
+    "uptime":           "public",
+    "status":           "public",
+    "players":          "public",
+}
+
+# Assertion de cohérence : les commandes "configurable" dans ALL_COMMANDS_VISIBILITY
+# doivent correspondre exactement à CONFIGURABLE_COMMANDS.
+assert set(CONFIGURABLE_COMMANDS) == {
+    cmd for cmd, vis in ALL_COMMANDS_VISIBILITY.items() if vis == "configurable"
+}, (
+    "Incohérence entre CONFIGURABLE_COMMANDS et ALL_COMMANDS_VISIBILITY. "
+    "Mettez à jour les deux structures en même temps."
+)
+
 
 def check_permission(interaction: discord.Interaction, command: str, config: dict) -> bool:
     """
@@ -53,3 +90,17 @@ def get_permission_summary(guild_id: int, config: dict) -> dict[str, dict]:
         cmd: stored.get(cmd, DEFAULT_PERMISSIONS[cmd])
         for cmd in CONFIGURABLE_COMMANDS
     }
+
+
+def get_full_permission_summary(guild_id: int, config: dict) -> dict[str, dict]:
+    """Retourne le statut de permission de toutes les commandes du bot."""
+    guild_str = str(guild_id)
+    stored = config.get("guilds", {}).get(guild_str, {}).get("permissions", {})
+    result = {}
+    for cmd, visibility in ALL_COMMANDS_VISIBILITY.items():
+        if visibility == "configurable":
+            effective = stored.get(cmd, DEFAULT_PERMISSIONS.get(cmd, {"admin_only": False, "allowed_roles": []}))
+            result[cmd] = {"visibility": visibility, **effective}
+        else:
+            result[cmd] = {"visibility": visibility}
+    return result

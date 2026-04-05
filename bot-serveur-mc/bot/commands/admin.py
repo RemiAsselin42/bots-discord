@@ -12,9 +12,9 @@ from bot.autocomplete import server_autocomplete, version_autocomplete
 from botocore.exceptions import ClientError
 
 from bot.aws import format_boto_error, get_ec2_client, get_instance_state, manage_sg_port
-from bot.config import load_config, save_config
+from bot.config import DEFAULT_HOURLY_COST, GUILD_DEFAULT_PARAMS, get_guild_defaults, load_config, save_config, set_guild_default
 from bot.helpers import require_guild, resolve_duckdns_host, slugify_name
-from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_permission_summary
+from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_full_permission_summary, get_permission_summary
 from bot.port_manager import assign_bedrock_port, assign_port
 
 
@@ -185,13 +185,17 @@ class _InstanceStartView(discord.ui.View):
     async def install_later(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
+        bedrock_note = (
+            f"\n# Port Bedrock (UDP) : {self._bedrock_port}" if self._bedrock else ""
+        )
         await interaction.followup.send(
             f":information_source: Installation reportée. Créez manuellement le dossier :\n"
             f"```bash\n"
             f"ssh ec2-user@$MC_SERVER_HOST\n"
             f"mkdir -p ~/minecraft-servers/{self._server_key}\n"
             f"cd ~/minecraft-servers/{self._server_key}\n"
-            f"# Ajouter server.jar, eula.txt et server.properties (port {self._port})\n"
+            f"# Ajouter server.jar, eula.txt et server.properties (port TCP {self._port})"
+            f"{bedrock_note}\n"
             f"```"
         )
         self.stop()
@@ -585,12 +589,22 @@ class _RemoveServerView(discord.ui.View):
             )
 
 
+# Labels d'affichage pour les paramètres de /setdefault et /showdefaults.
+# Doit rester cohérent avec GUILD_DEFAULT_PARAMS dans config.py.
+_PARAM_LABELS: dict[str, str] = {
+    "instance_id": "ID d'instance EC2",
+    "region":      "Région AWS",
+    "hourly_cost": "Coût horaire ($)",
+    "max_ram":     "RAM maximale",
+}
+
+
 def setup(tree: app_commands.CommandTree) -> None:
 
     @tree.command(name="createserver", description="Crée un nouveau serveur Minecraft avec attribution automatique de port")
     @app_commands.describe(
         name="Nom affiché du serveur",
-        instance_id="ID de l'instance EC2 AWS (défaut: i-XXXXXXXXXXXXXXXXX)",
+        instance_id="ID de l'instance EC2 AWS (laissez vide pour utiliser le défaut de la guild)",
         ram="RAM allouée au serveur (ex: 2G, 1536M, 512M) (entiers uniquement)",
         region="Région AWS de l'instance (ex: eu-north-1, eu-west-3, us-east-1)",
         version="Version de Minecraft (ex: 1.21.4, latest)",
@@ -611,9 +625,9 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def createserver_command(
         interaction: discord.Interaction,
         name: str,
-        instance_id: str = "i-XXXXXXXXXXXXXXXXX",
-        ram: str = "1536M",
-        region: str = "eu-north-1",
+        instance_id: str | None = None,
+        ram: str | None = None,
+        region: str | None = None,
         version: str = "latest",
         motd: str | None = None,
         max_players: int = 20,
@@ -629,6 +643,16 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
+        guild_str = str(interaction.guild.id)
+        config = load_config()
+        guild_defaults = get_guild_defaults(interaction.guild.id, config)
+
+        # Résolution : valeur fournie > défaut guild > fallback hardcodé
+        instance_id = instance_id or guild_defaults.get("instance_id", "i-XXXXXXXXXXXXXXXXX")
+        ram = ram or guild_defaults.get("max_ram", "1536M")
+        region = region or guild_defaults.get("region", "eu-north-1")
+        hourly_cost: float = guild_defaults.get("hourly_cost", DEFAULT_HOURLY_COST)
+
         if not instance_id.startswith("i-") or len(instance_id) != 19:
             await interaction.response.send_message(
                 ":x: Format d'instance_id invalide. Exemple: `i-0123456789abcdef0`", ephemeral=True
@@ -642,9 +666,6 @@ def setup(tree: app_commands.CommandTree) -> None:
                 ephemeral=True,
             )
             return
-
-        guild_str = str(interaction.guild.id)
-        config = load_config()
 
         if guild_str not in config["guilds"]:
             config["guilds"][guild_str] = {"name": interaction.guild.name, "servers": {}}
@@ -679,6 +700,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             "minecraft_port": str(port),
             "max_ram": ram_upper,
             "min_ram": "1G",
+            "hourly_cost": hourly_cost,
         }
         if bedrock:
             server_data["bedrock"] = True
@@ -955,7 +977,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         except Exception as e:
             await interaction.response.send_message(f":x: Erreur : {e}", ephemeral=True)
 
-    @tree.command(name="listpermissions", description="Affiche les permissions configurées pour ce serveur Discord")
+    @tree.command(name="listpermissions", description="Affiche les permissions de toutes les commandes")
     @require_guild
     async def listpermissions_command(interaction: discord.Interaction):
 
@@ -966,19 +988,102 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         config = load_config()
-        summary = get_permission_summary(interaction.guild.id, config)
+        summary = get_full_permission_summary(interaction.guild.id, config)
+
+        configurables = [(cmd, data) for cmd, data in summary.items() if data["visibility"] == "configurable"]
+        admins = [(cmd, data) for cmd, data in summary.items() if data["visibility"] == "admin"]
+        publics = [(cmd, data) for cmd, data in summary.items() if data["visibility"] == "public"]
 
         lines = [":closed_lock_with_key: **Permissions des commandes :**\n"]
-        for cmd, perm in summary.items():
-            admin_only = perm.get("admin_only", False)
+
+        lines.append("**Configurables :**")
+        for cmd, perm in configurables:
             allowed_roles = perm.get("allowed_roles", [])
             if allowed_roles:
                 role_mentions = " ".join(f"<@&{r}>" for r in allowed_roles)
                 lines.append(f"• `/{cmd}` — {role_mentions} (+ admins)")
-            elif admin_only:
+            elif perm.get("admin_only", False):
                 lines.append(f"• `/{cmd}` — admins uniquement")
             else:
                 lines.append(f"• `/{cmd}` — tout le monde")
+
+        lines.append("\n**Admin uniquement :**")
+        for cmd, _ in admins:
+            lines.append(f"• `/{cmd}`")
+
+        lines.append("\n**Publiques :**")
+        for cmd, _ in publics:
+            lines.append(f"• `/{cmd}`")
+
+        await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+    # ── Paramètres par défaut de la guild ────────────────────────────────────
+
+    @tree.command(name="setdefault", description="Définit un paramètre par défaut pour la guild (utilisé lors de /createserver)")
+    @app_commands.describe(
+        parameter="Paramètre à définir",
+        value="Valeur à affecter",
+    )
+    @app_commands.choices(parameter=[
+        app_commands.Choice(name="ID d'instance EC2", value="instance_id"),
+        app_commands.Choice(name="Région AWS",        value="region"),
+        app_commands.Choice(name="Coût horaire ($)",  value="hourly_cost"),
+        app_commands.Choice(name="RAM maximale",      value="max_ram"),
+    ])
+    @require_guild
+    async def setdefault_command(interaction: discord.Interaction, parameter: str, value: str):
+
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                ":x: Seuls les administrateurs peuvent définir des paramètres par défaut.", ephemeral=True
+            )
+            return
+
+        config = load_config()
+        try:
+            set_guild_default(interaction.guild.id, parameter, value, config)
+            save_config(config)
+        except ValueError as e:
+            await interaction.response.send_message(f":x: {e}", ephemeral=True)
+            return
+
+        label = _PARAM_LABELS.get(parameter, parameter)
+        await interaction.response.send_message(
+            f":white_check_mark: Défaut **{label}** mis à jour : `{value}`\n"
+            f":information_source: Ce défaut sera utilisé par `/createserver` si le paramètre n'est pas fourni.",
+            ephemeral=True,
+        )
+
+    @tree.command(name="showdefaults", description="Affiche les paramètres par défaut configurés pour ce serveur Discord")
+    @require_guild
+    async def showdefaults_command(interaction: discord.Interaction):
+
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                ":x: Seuls les administrateurs peuvent voir les paramètres par défaut.", ephemeral=True
+            )
+            return
+
+        config = load_config()
+        defaults = get_guild_defaults(interaction.guild.id, config)
+
+        if not defaults:
+            await interaction.response.send_message(
+                ":information_source: Aucun paramètre par défaut configuré.\n"
+                "Utilisez `/setdefault` pour en définir.",
+                ephemeral=True,
+            )
+            return
+
+        lines = [":gear: **Paramètres par défaut de la guild :**\n"]
+        for param in GUILD_DEFAULT_PARAMS:
+            if param in defaults:
+                label = _PARAM_LABELS.get(param, param)
+                val = defaults[param]
+                if param == "hourly_cost":
+                    lines.append(f"• **{label}** : `${val:.4f}/h`")
+                else:
+                    lines.append(f"• **{label}** : `{val}`")
 
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
