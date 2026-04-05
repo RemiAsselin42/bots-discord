@@ -234,6 +234,207 @@ class _InstanceStartView(discord.ui.View):
         )
 
 
+class _RemoveServerDeleteView(discord.ui.View):
+    """Confirmation finale : supprimer les fichiers sur l'instance (rm -rf)."""
+
+    def __init__(
+        self,
+        *,
+        original_interaction: discord.Interaction,
+        server_key: str,
+        name: str,
+        instance_id: str | None,
+        region: str,
+        ssh_host: str | None,
+        base_result: str,
+    ) -> None:
+        super().__init__(timeout=120)
+        self._orig = original_interaction
+        self._server_key = server_key
+        self._name = name
+        self._instance_id = instance_id
+        self._region = region
+        self._ssh_host = ssh_host
+        self._base_result = base_result
+
+    def _disable_all(self) -> None:
+        for child in self.children:
+            child.disabled = True  # type: ignore[attr-defined]
+
+    @discord.ui.button(label="Supprimer les fichiers", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        asyncio.create_task(self._do_delete(interaction))
+        self.stop()
+
+    @discord.ui.button(label="Conserver les fichiers", style=discord.ButtonStyle.secondary, emoji="📁")
+    async def keep_files(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            self._base_result + "\n:information_source: Les fichiers sur l'instance ont été conservés.",
+            ephemeral=True,
+        )
+        self.stop()
+
+    async def _do_delete(self, btn_interaction: discord.Interaction) -> None:
+        from bot.ssh import _resolve_host
+        from bot.minecraft_process import MC_SERVER_USER
+        from bot.config import load_config
+        import os
+
+        _user = MC_SERVER_USER
+        _key_path = os.getenv("MC_SERVER_KEY_PATH", "")
+
+        if not _key_path or not self._ssh_host:
+            await btn_interaction.followup.send(
+                self._base_result
+                + "\n:warning: Impossible de supprimer les fichiers : SSH non configuré ou hôte inconnu.",
+                ephemeral=True,
+            )
+            return
+
+        from bot.ssh import ssh_execute
+        command = f"rm -rf /home/{_user}/minecraft-servers/{self._server_key}"
+        success, output = await asyncio.to_thread(
+            ssh_execute, self._ssh_host, _user, _key_path, command, 30
+        )
+
+        if success:
+            await btn_interaction.followup.send(
+                self._base_result
+                + f"\n:white_check_mark: Fichiers `~/minecraft-servers/{self._server_key}` supprimés de l'instance.",
+                ephemeral=True,
+            )
+        else:
+            await btn_interaction.followup.send(
+                self._base_result
+                + f"\n:warning: Erreur lors de la suppression des fichiers :\n```\n{output}\n```",
+                ephemeral=True,
+            )
+
+
+class _RemoveServerView(discord.ui.View):
+    """Confirmation pour supprimer un serveur (avec arrêt Java si nécessaire)."""
+
+    def __init__(
+        self,
+        *,
+        interaction: discord.Interaction,
+        server_key: str,
+        name: str,
+        guild_str: str,
+        port: int | None,
+        instance_id: str | None,
+        region: str,
+        ssh_host: str | None,
+        java_running: bool,
+    ) -> None:
+        super().__init__(timeout=120)
+        self._orig = interaction
+        self._server_key = server_key
+        self._name = name
+        self._guild_str = guild_str
+        self._port = port
+        self._instance_id = instance_id
+        self._region = region
+        self._ssh_host = ssh_host
+        self._java_running = java_running
+
+        if java_running:
+            self.proceed.label = "Arrêter et supprimer"
+            self.proceed.emoji = "🛑"
+        else:
+            self.proceed.label = "Confirmer la suppression"
+            self.proceed.emoji = "🗑️"
+
+    def _disable_all(self) -> None:
+        for child in self.children:
+            child.disabled = True  # type: ignore[attr-defined]
+
+    @discord.ui.button(label="Confirmer", style=discord.ButtonStyle.danger)
+    async def proceed(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        asyncio.create_task(self._do_remove(interaction))
+        self.stop()
+
+    @discord.ui.button(label="Annuler", style=discord.ButtonStyle.secondary, emoji="✖️")
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(":information_source: Suppression annulée.", ephemeral=True)
+        self.stop()
+
+    async def _do_remove(self, btn_interaction: discord.Interaction) -> None:
+        from bot.minecraft_process import stop_minecraft_server
+
+        lines: list[str] = []
+
+        # Étape 1 : arrêt du processus Java si nécessaire
+        if self._java_running:
+            await btn_interaction.followup.send(
+                f":arrows_counterclockwise: Arrêt du serveur **{self._name}** en cours…", ephemeral=True
+            )
+            success, output = await asyncio.to_thread(
+                stop_minecraft_server, self._server_key, host=self._ssh_host
+            )
+            if success:
+                lines.append(":red_circle: Processus Java arrêté.")
+            else:
+                lines.append(f":warning: Impossible d'arrêter le processus Java :\n```\n{output}\n```")
+
+        # Étape 2 : suppression de la config Discord
+        config = load_config()
+        guild_servers = config.get("guilds", {}).get(self._guild_str, {}).get("servers", {})
+        if self._server_key in guild_servers:
+            del guild_servers[self._server_key]
+            try:
+                save_config(config)
+                lines.append(":white_check_mark: Configuration Discord supprimée.")
+            except Exception as e:
+                lines.append(f":warning: Erreur lors de la suppression de la config : {e}")
+
+        # Étape 3 : révocation du port AWS
+        if self._port and self._instance_id:
+            try:
+                await asyncio.to_thread(manage_sg_port, self._instance_id, self._region, self._port, "revoke")
+                lines.append(f":white_check_mark: Port `{self._port}` révoqué dans le Security Group.")
+            except Exception as e:
+                lines.append(
+                    f":warning: Port `{self._port}` non révoqué : "
+                    + format_boto_error(e, action="révoquer le port", instance_id=self._instance_id, region=self._region)
+                )
+
+        base_result = f":wastebasket: Serveur **{self._name}** (`{self._server_key}`) :\n" + "\n".join(lines)
+
+        # Étape 4 : proposition de supprimer les fichiers sur l'instance
+        if self._ssh_host:
+            delete_view = _RemoveServerDeleteView(
+                original_interaction=btn_interaction,
+                server_key=self._server_key,
+                name=self._name,
+                instance_id=self._instance_id,
+                region=self._region,
+                ssh_host=self._ssh_host,
+                base_result=base_result,
+            )
+            await btn_interaction.followup.send(
+                base_result
+                + f"\n\n:warning: Voulez-vous aussi supprimer les fichiers sur l'instance ?\n"
+                f"(`rm -rf ~/minecraft-servers/{self._server_key}`)",
+                view=delete_view,
+                ephemeral=True,
+            )
+        else:
+            await btn_interaction.followup.send(
+                base_result
+                + "\n:information_source: Hôte SSH inconnu — fichiers sur l'instance non supprimés.",
+                ephemeral=True,
+            )
+
+
 def setup(tree: app_commands.CommandTree) -> None:
 
     @tree.command(name="createserver", description="Crée un nouveau serveur Minecraft avec attribution automatique de port")
@@ -396,24 +597,51 @@ def setup(tree: app_commands.CommandTree) -> None:
         port = server_data.get("port")
         instance_id = server_data.get("instance_id")
         region = server_data.get("region", "eu-north-1")
-        del config["guilds"][guild_str]["servers"][server]
+        ssh_host = server_data.get("ssh_host") or None
 
-        try:
-            save_config(config)
-        except Exception as e:
-            await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
-            return
-
-        sg_info = ""
-        if port and instance_id:
+        # Résoudre l'IP SSH si nécessaire
+        from bot.ssh import get_instance_public_ip
+        from bot.minecraft_process import is_minecraft_process_running, stop_minecraft_server, MC_SERVER_USER
+        if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
             try:
-                await asyncio.to_thread(manage_sg_port, instance_id, region, port, "revoke")
-                sg_info = ""
-            except Exception as e:
-                sg_info = f"\n:warning: Port `{port}` non fermé dans le Security Group : {format_boto_error(e, action='révoquer le port', instance_id=instance_id, region=region)}"
-        await interaction.response.send_message(
-            f":white_check_mark: Serveur **{name}** (`{server}`) supprimé avec succès.{sg_info}"
+                ssh_host = await asyncio.to_thread(get_instance_public_ip, instance_id, region)
+            except Exception:
+                ssh_host = None
+
+        # Vérifier si le processus Java tourne
+        java_running = False
+        if ssh_host:
+            try:
+                _, java_running = await asyncio.to_thread(is_minecraft_process_running, server, host=ssh_host)
+            except Exception:
+                java_running = False
+
+        view = _RemoveServerView(
+            interaction=interaction,
+            server_key=server,
+            name=name,
+            guild_str=guild_str,
+            port=port,
+            instance_id=instance_id,
+            region=region,
+            ssh_host=ssh_host,
+            java_running=java_running,
         )
+
+        if java_running:
+            msg = (
+                f":warning: Le processus Java de **{name}** est actuellement **en cours d'exécution**.\n\n"
+                f"Voulez-vous l'arrêter avant de supprimer le serveur ?"
+            )
+        else:
+            msg = (
+                f":wastebasket: Voulez-vous vraiment supprimer le serveur **{name}** (`{server}`) ?\n\n"
+                f"• Config Discord : supprimée\n"
+                f"• Port `{port}` dans le Security Group AWS : révoqué\n"
+                f"• Fichiers sur l'instance (`~/minecraft-servers/{server}`) : à confirmer séparément"
+            )
+
+        await interaction.response.send_message(msg, view=view, ephemeral=True)
 
     @tree.command(name="editserver", description="Modifie la configuration d'un serveur existant")
     @app_commands.describe(
