@@ -88,8 +88,13 @@ if [ ! -f eula.txt ] || ! grep -q '^eula=true$' eula.txt; then
 fi
 
 setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
-sleep 2
-echo "Start command dispatched PID $!"
+sleep 3
+if ! pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
+    echo "Le processus Java s'est arrêté immédiatement après le lancement." >&2
+    tail -n 20 stdout.log 2>/dev/null || true
+    exit 1
+fi
+echo "Serveur Minecraft démarré."
 """
     return ssh_execute(_host, _user, _key_path, command, timeout=30)
 
@@ -190,6 +195,7 @@ def check_rcon_ready(
 set -e
 PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
 SERVER_DIR="/home/{_user}/minecraft-servers/{server_key}"
+MC_PROC_PATTERN='[j]ava .*minecraft-servers/{server_key}/server.jar'
 if [ ! -f "$PROPS" ]; then
     echo "Fichier server.properties introuvable : $PROPS"
     exit 1
@@ -208,8 +214,8 @@ if command -v mcrcon > /dev/null 2>&1; then
     exit $?
 fi
 
-# Fallback : si mcrcon est absent, tester au moins l'ouverture du port RCON.
-if timeout 2 bash -c "cat < /dev/null > /dev/tcp/127.0.0.1/$RCON_PORT" 2>/dev/null; then
+# Fallback : si mcrcon est absent, vérifier que le processus Java tourne ET que le port RCON répond.
+if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1 && timeout 2 bash -c "cat < /dev/null > /dev/tcp/127.0.0.1/$RCON_PORT" 2>/dev/null; then
     echo "RCON port ouvert (mcrcon absent)"
     exit 0
 fi
