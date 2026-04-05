@@ -513,7 +513,8 @@ PYEOF
     else:
         icon_cmd = ""
     command = f"""
-set -e
+set -euo pipefail
+exec 2>&1
 mkdir -p {server_dir}
 
 PROPS_FILE="{server_dir}/server.properties"
@@ -532,7 +533,7 @@ if [ -f "$PROPS_FILE" ]; then
 fi
 
 if [ ! -f {server_dir}/server.jar ]; then
-    wget -q "{_jar_url}" -O {server_dir}/server.jar
+    wget -nv "{_jar_url}" -O {server_dir}/server.jar
 fi
 
 echo "eula=true" > {server_dir}/eula.txt
@@ -560,9 +561,9 @@ PROPS
         command += f"""
 # Geyser + Floodgate + ViaVersion (Bedrock support)
 mkdir -p {server_dir}/plugins/Geyser-Spigot
-wget -q "{GEYSER_SPIGOT_URL}" -O {server_dir}/plugins/Geyser-Spigot.jar
-wget -q "{FLOODGATE_SPIGOT_URL}" -O {server_dir}/plugins/floodgate-spigot.jar
-wget -q --content-disposition "{VIAVERSION_URL}" -O {server_dir}/plugins/ViaVersion.jar
+wget -nv "{GEYSER_SPIGOT_URL}" -O {server_dir}/plugins/Geyser-Spigot.jar
+wget -nv "{FLOODGATE_SPIGOT_URL}" -O {server_dir}/plugins/floodgate-spigot.jar
+wget -nv --max-redirect=5 "{VIAVERSION_URL}" -O {server_dir}/plugins/ViaVersion.jar
 
 cat > {server_dir}/plugins/Geyser-Spigot/config.yml <<'GEYSER'
 bedrock:
