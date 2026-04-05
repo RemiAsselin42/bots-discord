@@ -8,61 +8,11 @@ from mcstatus.responses import JavaStatusResponse
 
 from bot.autocomplete import server_autocomplete
 from bot.aws import format_boto_error, get_ec2_client
-from bot.commands.helpers import get_uptime_and_cost
 from bot.config import get_server_config, load_config
 from bot.helpers import is_valid_instance_id, require_guild, resolve_duckdns_host
 
 
 def setup(tree: app_commands.CommandTree) -> None:
-
-    @tree.command(name="cost", description="Affiche le coût réel depuis le démarrage de l'instance")
-    @app_commands.describe(server="Sélectionnez le serveur")
-    @app_commands.autocomplete(server=server_autocomplete)
-    @require_guild
-    async def cost_command(interaction: discord.Interaction, server: str):
-
-        server_config = get_server_config(interaction.guild.id, server, load_config())
-        if not server_config:
-            await interaction.response.send_message(
-                ":x: Serveur introuvable dans la configuration.", ephemeral=True
-            )
-            return
-
-        instance_id = server_config.get("instance_id")
-        name = server_config.get("name", server)
-        region = server_config.get("region", "eu-north-1")
-        hourly_cost: float = server_config.get("hourly_cost", 0.0416)
-
-        if not is_valid_instance_id(instance_id):
-            await interaction.response.send_message(
-                ":x: L'ID d'instance configuré est invalide.", ephemeral=True
-            )
-            return
-
-        try:
-            data = get_uptime_and_cost(instance_id, region, hourly_cost)
-
-            if data is None:
-                await interaction.response.send_message(f":white_circle: Le serveur **{name}** est arrêté. Coût actuel : $0.00")
-                return
-
-            if not data["running"]:
-                await interaction.response.send_message(
-                    f":white_circle: Le serveur **{name}** est à l'état **{data['state']}**. Impossible de calculer le coût."
-                )
-                return
-
-            await interaction.response.send_message(
-                f":moneybag: **Coût - {name}**\n\n"
-                f"- **En ligne depuis :** {data['hours']}h {data['minutes']}min\n"
-                f"- **Coût horaire :** ${hourly_cost:.4f}/h\n"
-                f"- **Coût total actuel :** `${data['cost']:.4f}`"
-            )
-        except Exception as e:
-            await interaction.response.send_message(
-                format_boto_error(e, action="calculer le coût", instance_id=instance_id, region=region),
-                ephemeral=True,
-            )
 
     @tree.command(name="players", description="Affiche les joueurs connectés au serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur")

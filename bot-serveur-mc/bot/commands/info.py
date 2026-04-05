@@ -10,6 +10,14 @@ from bot.config import get_guild_servers, get_server_config, load_config
 from bot.helpers import is_valid_instance_id, require_guild, resolve_duckdns_host
 
 
+def _format_bedrock_block(address: str, bedrock_port: int) -> str:
+    return (
+        f"\n**Bedrock :**\n"
+        f"Adresse : `{address}`\n"
+        f"Port : `{bedrock_port}`"
+    )
+
+
 def setup(tree: app_commands.CommandTree) -> None:
 
     @tree.command(name="list", description="Liste tous les serveurs Minecraft disponibles")
@@ -48,7 +56,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             bedrock_port = server_config.get("bedrock_port")
             bedrock_info = ""
             if bedrock_port:
-                bedrock_info = f"\n**Bedrock :**\n```{full_domain}:{bedrock_port}```"
+                bedrock_info = _format_bedrock_block(full_domain, bedrock_port)
             await interaction.response.send_message(
                 f":globe_with_meridians: Adresse du serveur **{name}** :\n\n"
                 f"**Java :**\n```{full_domain}:{minecraft_port}```{bedrock_info}"
@@ -89,7 +97,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             bedrock_port = server_config.get("bedrock_port")
             bedrock_info = ""
             if bedrock_port:
-                bedrock_info = f"\n**Bedrock :**\n```{public_ip}:{bedrock_port}```"
+                bedrock_info = _format_bedrock_block(public_ip, bedrock_port)
             await interaction.followup.send(
                 f":globe_with_meridians: **Adresse du serveur {name} :**\n\n"
                 f"**Java :**\n```{public_ip}:{minecraft_port}```{bedrock_info}"
@@ -136,11 +144,12 @@ def setup(tree: app_commands.CommandTree) -> None:
                 return
 
             await interaction.response.send_message(
-                f":bar_chart: **Uptime - {name}**\n\n"
-                f":stopwatch: **État:** {data['state']}\n"
-                f":clock1: **En ligne depuis:** {data['hours']}h {data['minutes']}min ({data['delta'].days} jours)\n"
-                f":moneybag: **Coût horaire:** ${hourly_cost:.4f}\n"
-                f":chart_with_upwards_trend: **Coût depuis le démarrage:** ${data['cost']:.2f}"
+                f":bar_chart: **Uptime — {name}**\n\n"
+                f":green_circle: **État :** {data['state']}\n"
+                f":clock1: **En ligne depuis :** {data['delta'].days}j {data['hours'] % 24}h {data['minutes']}min\n"
+                f":stopwatch: **Démarré le :** {data['launch_dt'].strftime('%d/%m/%Y à %H:%M')} UTC\n"
+                f":moneybag: **Coût horaire :** ${hourly_cost:.4f}/h\n"
+                f":chart_with_upwards_trend: **Coût total :** ${data['cost']:.4f}"
             )
         except Exception as e:
             await interaction.response.send_message(
