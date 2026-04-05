@@ -578,7 +578,9 @@ remote:
 GEYSER
 """
 
-    success, output = ssh_execute(_host, _user, _key_path, command)
+    # Les téléchargements de JARs (Paper + plugins Bedrock) peuvent prendre plusieurs minutes
+    timeout = 300 if bedrock else 120
+    success, output = ssh_execute(_host, _user, _key_path, command, timeout=timeout)
 
     if success:
         return (
