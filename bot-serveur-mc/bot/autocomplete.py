@@ -42,11 +42,10 @@ async def version_autocomplete(
     # Afficher les snapshots uniquement si l'input contient des lettres (ex: "24w", "pre", "rc")
     show_snapshots = bool(re.search(r"[a-zA-Z]", current))
 
-    max_str = ".".join(str(x) for x in MAX_MC_VERSION)
     choices: list[app_commands.Choice[str]] = []
 
     if not current:
-        choices.append(app_commands.Choice(name=f"{max_str} (dernière version compatible Java 21)", value=max_str))
+        choices.append(app_commands.Choice(name="latest (dernière version stable)", value="latest"))
 
     for v in _mc_versions_cache:
         if v["type"] not in ("release", "snapshot"):
