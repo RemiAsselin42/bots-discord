@@ -96,19 +96,16 @@ if [ ! -f eula.txt ] || ! grep -q '^eula=true$' eula.txt; then
 fi
 
 setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
-MC_PID=$!
-# Attendre jusqu'à 30s que Java soit bien lancé (extraction libs au 1er démarrage réel)
+# Attendre jusqu'à 90s que Java soit détecté par pgrep.
+# On se base uniquement sur pgrep (pas sur $! qui pointe le wrapper setsid/nohup, pas Java).
+# La génération du monde peut prendre 30-60s sur une petite instance.
 LAUNCH_WAITED=0
-while [ $LAUNCH_WAITED -lt 30 ]; do
+while [ $LAUNCH_WAITED -lt 90 ]; do
     sleep 5
     LAUNCH_WAITED=$((LAUNCH_WAITED + 5))
     if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
         echo "Serveur Minecraft démarré."
         exit 0
-    fi
-    # Si le processus s'est terminé (PID mort), inutile d'attendre plus
-    if ! kill -0 "$MC_PID" 2>/dev/null; then
-        break
     fi
 done
 echo "Le processus Java s'est arrêté immédiatement après le lancement." >&2
