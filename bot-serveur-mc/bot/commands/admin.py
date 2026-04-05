@@ -1081,7 +1081,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 warning = f"\n\n:warning: Redémarrez le serveur avec `/restart {server}` pour appliquer les changements de `server.properties`."
             error_note = ("\n\n:warning: " + "\n".join(uuid_errors)) if uuid_errors else ""
             await interaction.followup.send(
-                f":white_check_mark: **{display_name}** — propriétés mises à jour :\n\n{result}{warning}{error_note}"
+                f":white_check_mark: Propriétés du serveur **{display_name}** mises à jour :\n{result}{warning}{error_note}"
             )
         else:
             await interaction.followup.send(
