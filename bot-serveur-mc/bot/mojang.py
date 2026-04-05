@@ -6,7 +6,7 @@ import re
 import aiohttp
 
 MOJANG_MANIFEST_URL = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
-MAX_MC_VERSION = (1, 21, 4)  # version maximale compatible Java 21
+MAX_MC_VERSION = (1, 21, 99)  # plafond indicatif, à relever si Minecraft 1.22+ requiert Java > 21
 
 
 def _parse_mc_version(version_id: str) -> tuple[int, ...] | None:
