@@ -117,7 +117,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
         if success:
             warning = ""
             if self._motd or self._max_players is not None or self._gamemode:
-                warning = "\n\n:warning: Redémarrez le serveur pour appliquer les changements de `server.properties`."
+                warning = f"\n\n:warning: Redémarrez le serveur avec `/restart {self._server_key}` pour appliquer les changements de `server.properties`."
             error_note = ("\n\n:warning: " + "\n".join(self._uuid_errors)) if self._uuid_errors else ""
             await btn_interaction.followup.send(
                 f":white_check_mark: **{self._display_name}** — propriétés mises à jour :\n\n{result}{warning}{error_note}"
@@ -717,7 +717,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         if success:
             warning = ""
             if motd or max_players is not None or gamemode:
-                warning = "\n\n:warning: Redémarrez le serveur pour appliquer les changements de `server.properties`."
+                warning = f"\n\n:warning: Redémarrez le serveur avec `/restart {server}` pour appliquer les changements de `server.properties`."
             error_note = ("\n\n:warning: " + "\n".join(uuid_errors)) if uuid_errors else ""
             await interaction.followup.send(
                 f":white_check_mark: **{display_name}** — propriétés mises à jour :\n\n{result}{warning}{error_note}"
