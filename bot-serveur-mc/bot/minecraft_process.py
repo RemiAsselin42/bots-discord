@@ -499,6 +499,9 @@ def setup_minecraft_server(
   wget -q "{icon_url}" -O {server_dir}/server-icon.png.tmp && python3 - <<'PYEOF'
 from PIL import Image
 img = Image.open("{server_dir}/server-icon.png.tmp").convert("RGBA")
+w, h = img.size
+side = min(w, h)
+img = img.crop(((w - side) // 2, (h - side) // 2, (w + side) // 2, (h + side) // 2))
 img = img.resize((64, 64), Image.LANCZOS)
 img.save("{server_dir}/server-icon.png", "PNG")
 PYEOF
@@ -681,6 +684,9 @@ def edit_minecraft_properties(
   wget -q "{icon_url}" -O {server_dir}/server-icon.png.tmp && python3 - <<'PYEOF'
 from PIL import Image
 img = Image.open("{server_dir}/server-icon.png.tmp").convert("RGBA")
+w, h = img.size
+side = min(w, h)
+img = img.crop(((w - side) // 2, (h - side) // 2, (w + side) // 2, (h + side) // 2))
 img = img.resize((64, 64), Image.LANCZOS)
 img.save("{server_dir}/server-icon.png", "PNG")
 PYEOF
