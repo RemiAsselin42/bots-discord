@@ -169,8 +169,8 @@ def setup(tree: app_commands.CommandTree) -> None:
                 ec2 = get_ec2_client(region)
                 ec2.stop_instances(InstanceIds=[instance_id])
                 await interaction.followup.send(
-                    f":red_circle: Le serveur **{name}** a été arrêté. "
-                    "Aucun autre serveur actif — l'instance EC2 est en cours d'arrêt."
+                    f":red_circle: Le serveur **{name}** a été arrêté.\n"
+                    "Aucun autre serveur actif dpnc l'instance EC2 est en cours d'arrêt."
                 )
             except Exception as e:
                 await interaction.followup.send(

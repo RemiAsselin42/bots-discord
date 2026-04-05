@@ -54,9 +54,9 @@ def setup(tree: app_commands.CommandTree) -> None:
 
             await interaction.response.send_message(
                 f":moneybag: **Coût - {name}**\n\n"
-                f":stopwatch: **En ligne depuis:** {data['hours']}h {data['minutes']}min\n"
-                f":1234: **Coût horaire:** ${hourly_cost:.4f}/h\n"
-                f":money_with_wings: **Coût total actuel:** `${data['cost']:.4f}` (≈ ${data['cost']:.2f})"
+                f"- **En ligne depuis :** {data['hours']}h {data['minutes']}min\n"
+                f"- **Coût horaire :** ${hourly_cost:.4f}/h\n"
+                f"- **Coût total actuel :** `${data['cost']:.4f}`"
             )
         except Exception as e:
             await interaction.response.send_message(

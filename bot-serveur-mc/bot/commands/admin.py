@@ -57,7 +57,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
         self._disable_all()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            f":arrows_counterclockwise: Démarrage de l'instance `{self._instance_id}`…"
+            f":arrows_counterclockwise: Démarrage de l'instance…"
         )
         asyncio.create_task(self._start_then_edit(interaction))
         self.stop()
@@ -99,7 +99,8 @@ class _InstanceStartForPropertiesView(discord.ui.View):
             return
 
         await btn_interaction.followup.send(
-            ":white_check_mark: Instance démarrée — attente que SSH soit disponible (30s)…"
+            f":white_check_mark: Instance démarrée.\n"
+            "Attente que SSH soit disponible (30s)…"
         )
         await asyncio.sleep(30)
 
@@ -170,7 +171,7 @@ class _InstanceStartView(discord.ui.View):
         self._disable_all()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            f":arrows_counterclockwise: Démarrage de l'instance `{self._instance_id}`…"
+            f":arrows_counterclockwise: Démarrage de l'instance…"
         )
         asyncio.create_task(self._start_then_setup(interaction))
         self.stop()
@@ -222,7 +223,8 @@ class _InstanceStartView(discord.ui.View):
             return
 
         await btn_interaction.followup.send(
-            ":white_check_mark: Instance démarrée — attente que SSH soit disponible (30s)…"
+            f":white_check_mark: Instance démarrée.\n"
+            "Attente que SSH soit disponible (30s)…"
         )
         await asyncio.sleep(30)
         await _run_ssh_setup(
@@ -363,7 +365,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             await interaction.response.send_message(
                 base_confirm
-                + f":warning: L'instance `{instance_id}` est actuellement {state_label}.\n"
+                + f":warning: L'instance `{instance_id}` est actuellement à l'arrêt.\n"
                 "Souhaitez-vous la démarrer pour installer le serveur maintenant ?",
                 view=view,
             )
@@ -665,7 +667,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 uuid_errors=uuid_errors,
             )
             await interaction.response.send_message(
-                f":warning: L'instance `{instance_id}` est actuellement {state_label}.\n"
+                f":warning: L'instance `{instance_id}` est actuellement à l'arrêt.\n"
                 "Souhaitez-vous la démarrer pour modifier les propriétés maintenant ?",
                 view=view,
             )
