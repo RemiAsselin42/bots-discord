@@ -201,6 +201,34 @@ async def notify_server_ready(
         )
 
 
+async def notify_restart_ready(
+    bot: discord.Client,
+    channel_id: int,
+    server_name: str,
+    server_key: str,
+    ssh_host: str | None = None,
+) -> None:
+    """Attend que RCON soit disponible après un restart Java, puis notifie le canal Discord."""
+    from bot.minecraft_process import check_rcon_ready
+
+    for _ in range(_RCON_READY_RETRIES):
+        await asyncio.sleep(_RCON_READY_INTERVAL)
+        ok, _ = await asyncio.to_thread(check_rcon_ready, server_key, host=ssh_host)
+        if ok:
+            channel = bot.get_channel(channel_id)
+            if channel:
+                await channel.send(
+                    f":white_check_mark: Le serveur **{server_name}** est prêt !"
+                )
+            return
+
+    channel = bot.get_channel(channel_id)
+    if channel:
+        await channel.send(
+            f":warning: Le serveur **{server_name}** n'a pas répondu après redémarrage (timeout RCON)."
+        )
+
+
 # ── Auto-stop ────────────────────────────────────────────────────────────────
 
 async def auto_stop_loop(bot: discord.Client) -> None:

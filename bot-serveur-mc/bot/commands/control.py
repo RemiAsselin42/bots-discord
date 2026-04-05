@@ -8,9 +8,9 @@ from bot.aws import format_boto_error, get_ec2_client
 from bot.config import get_server_config, load_config
 from bot.helpers import is_valid_instance_id, require_guild
 from bot.permissions import check_permission
-from bot.minecraft_process import check_other_mc_servers_running, stop_minecraft_server
+from bot.minecraft_process import check_other_mc_servers_running, start_minecraft_process, stop_minecraft_server
 from bot.ssh import get_instance_public_ip
-from bot.tasks import notify_server_ready
+from bot.tasks import notify_restart_ready, notify_server_ready
 
 
 def _get_instance_state(instance_id: str, region: str) -> str | None:
@@ -182,6 +182,76 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.followup.send(
                 f":red_circle: Le serveur Minecraft **{name}** a été arrêté."
             )
+
+    @tree.command(name="restart", description="Redémarre le processus Java du serveur Minecraft sans toucher à l'instance EC2")
+    @app_commands.describe(server="Sélectionnez le serveur à redémarrer")
+    @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
+    async def restart_command(interaction: discord.Interaction, server: str):
+
+        config = load_config()
+
+        if not check_permission(interaction, "stop", config):
+            await interaction.response.send_message(
+                ":x: Vous n'avez pas la permission de redémarrer ce serveur.", ephemeral=True
+            )
+            return
+
+        server_config = get_server_config(interaction.guild.id, server, config)
+        if not server_config:
+            await interaction.response.send_message(
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
+            )
+            return
+
+        name = server_config.get("name", server)
+        instance_id = server_config.get("instance_id")
+        region = server_config.get("region", "eu-north-1")
+        ssh_host = server_config.get("ssh_host") or None
+
+        if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
+            try:
+                ssh_host = await asyncio.to_thread(get_instance_public_ip, instance_id, region)
+            except Exception:
+                ssh_host = None
+
+        await interaction.response.defer()
+
+        # Étape 1 : arrêt du processus Java (sans EC2)
+        success, output = await asyncio.to_thread(stop_minecraft_server, server, host=ssh_host)
+        if not success:
+            await interaction.followup.send(
+                f":x: Impossible d'arrêter le serveur **{name}** :\n```\n{output}\n```",
+                ephemeral=True,
+            )
+            return
+
+        # Étape 2 : relance du processus Java
+        max_ram = server_config.get("max_ram", "1536M")
+        min_ram = server_config.get("min_ram", "1024M")
+        success, output = await asyncio.to_thread(
+            start_minecraft_process, server, max_ram=max_ram, min_ram=min_ram, host=ssh_host
+        )
+        if not success:
+            await interaction.followup.send(
+                f":x: Impossible de relancer le serveur **{name}** :\n```\n{output}\n```",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.followup.send(
+            f":arrows_counterclockwise: Le serveur **{name}** redémarre… Je vous notifie dès qu'il est prêt !"
+        )
+
+        asyncio.create_task(
+            notify_restart_ready(
+                bot=interaction.client,
+                channel_id=interaction.channel_id,
+                server_name=name,
+                server_key=server,
+                ssh_host=ssh_host,
+            )
+        )
 
     @tree.command(name="status", description="Vérifie le statut du serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur à vérifier")
