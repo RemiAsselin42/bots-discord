@@ -492,7 +492,15 @@ def setup_minecraft_server(
     _seed = seed or ""
 
     server_dir = f"/home/{_user}/minecraft-servers/{server_key}"
-    icon_cmd = f'wget -q "{icon_url}" -O {server_dir}/server-icon.png || true' if icon_url else ""
+    if icon_url:
+        icon_cmd = (
+            f'wget -q "{icon_url}" -O {server_dir}/server-icon.png.tmp && '
+            f'python3 -c "from PIL import Image; img = Image.open(\'{server_dir}/server-icon.png.tmp\').convert(\'RGBA\').resize((64,64), Image.LANCZOS); img.save(\'{server_dir}/server-icon.png\', \'PNG\')" && '
+            f'rm -f {server_dir}/server-icon.png.tmp || '
+            f'(convert "{server_dir}/server-icon.png.tmp" -resize 64x64! {server_dir}/server-icon.png && rm -f {server_dir}/server-icon.png.tmp) || true'
+        )
+    else:
+        icon_cmd = ""
     command = f"""
 set -e
 mkdir -p {server_dir}
@@ -664,7 +672,12 @@ def edit_minecraft_properties(
 
     # --- server-icon.png ---
     if icon_url:
-        parts.append(f'wget -q "{icon_url}" -O {server_dir}/server-icon.png')
+        parts.append(
+            f'wget -q "{icon_url}" -O {server_dir}/server-icon.png.tmp && '
+            f'python3 -c "from PIL import Image; img = Image.open(\'{server_dir}/server-icon.png.tmp\').convert(\'RGBA\').resize((64,64), Image.LANCZOS); img.save(\'{server_dir}/server-icon.png\', \'PNG\')" && '
+            f'rm -f {server_dir}/server-icon.png.tmp || '
+            f'(convert "{server_dir}/server-icon.png.tmp" -resize 64x64! {server_dir}/server-icon.png && rm -f {server_dir}/server-icon.png.tmp) || true'
+        )
         changes.append(f"• icône mise à jour")
 
     if not changes:
