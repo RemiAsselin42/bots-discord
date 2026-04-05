@@ -30,8 +30,8 @@ async def get_viaversion_jar_url() -> str:
     return f"{HANGAR_VIAVERSION_CDN_BASE}/{version}/PAPER/ViaVersion-{version}.jar"
 
 
-async def get_paper_jar_url(version_id: str) -> str:
-    """Résout un ID de version Minecraft (ex: '1.21.4', 'latest') en URL de Paper JAR.
+async def get_paper_jar_url(version_id: str) -> tuple[str, str]:
+    """Résout un ID de version Minecraft (ex: '1.21.4', 'latest') en (URL de Paper JAR, version résolue).
 
     Raises ValueError si la version n'est pas disponible pour Paper ou dépasse MAX_MC_VERSION.
     """
@@ -77,4 +77,4 @@ async def get_paper_jar_url(version_id: str) -> str:
 
         filename = build_data["downloads"]["application"]["name"]
 
-    return f"{PAPER_API_BASE}/versions/{version_id}/builds/{latest_build}/downloads/{filename}"
+    return f"{PAPER_API_BASE}/versions/{version_id}/builds/{latest_build}/downloads/{filename}", version_id

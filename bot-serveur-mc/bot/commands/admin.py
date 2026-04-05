@@ -1188,9 +1188,9 @@ async def _run_ssh_setup(
 
     try:
         if bedrock:
-            jar_url = await get_paper_jar_url(version)
+            jar_url, version = await get_paper_jar_url(version)
         else:
-            jar_url = await get_jar_url_for_version(version)
+            jar_url, version = await get_jar_url_for_version(version)
     except Exception:
         jar_url = None  # Fallback sur MC_SERVER_JAR_URL par défaut
 

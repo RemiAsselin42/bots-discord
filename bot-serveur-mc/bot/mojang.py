@@ -17,8 +17,8 @@ def _parse_mc_version(version_id: str) -> tuple[int, ...] | None:
     return tuple(int(x) for x in m.groups() if x is not None)
 
 
-async def get_jar_url_for_version(version_id: str) -> str:
-    """Résout un ID de version Minecraft (ex: '1.21.4', 'latest') en URL de server.jar.
+async def get_jar_url_for_version(version_id: str) -> tuple[str, str]:
+    """Résout un ID de version Minecraft (ex: '1.21.4', 'latest') en (URL de server.jar, version résolue).
 
     Raises ValueError si la version dépasse MAX_MC_VERSION.
     """
@@ -44,7 +44,7 @@ async def get_jar_url_for_version(version_id: str) -> str:
         async with session.get(version_entry["url"]) as resp:
             version_manifest = await resp.json()
 
-    return version_manifest["downloads"]["server"]["url"]
+    return version_manifest["downloads"]["server"]["url"], version_id
 
 
 async def get_player_uuid(username: str) -> tuple[str, str]:
