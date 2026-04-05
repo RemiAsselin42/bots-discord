@@ -1207,6 +1207,8 @@ async def _run_ssh_setup(
         if duckdns_domain:
             full_domain = resolve_duckdns_host(duckdns_domain)
             extra = f"\nDomaine: `{full_domain}:{port}`"
+            if bedrock and bedrock_port:
+                extra += f"\nBedrock: `{full_domain}:{bedrock_port}` (UDP)"
 
         sg_info = ""
         try:

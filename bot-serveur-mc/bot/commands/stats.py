@@ -166,7 +166,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             player_names = ", ".join(p.name for p in sample) if sample else "noms non disponibles"
             msg = (
                 f":busts_in_silhouette: Il y a actuellement `{online}/{max_players}` joueur(s) connecté(s) sur **{name}**.\n"
-                f":video_game: {player_names}"
+                f"{player_names}"
             )
 
         await interaction.followup.send(msg)
