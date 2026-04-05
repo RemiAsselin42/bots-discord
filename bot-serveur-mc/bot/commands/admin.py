@@ -17,6 +17,117 @@ from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_perm
 from bot.port_manager import assign_port
 
 
+class _InstanceStartForPropertiesView(discord.ui.View):
+    """Boutons proposant de démarrer l'instance EC2 avant de modifier les propriétés."""
+
+    def __init__(
+        self,
+        *,
+        instance_id: str,
+        region: str,
+        server_key: str,
+        display_name: str,
+        motd: str | None,
+        max_players: int | None,
+        gamemode: str | None,
+        ops_to_add: list[tuple[str, str]],
+        whitelist_to_add: list[tuple[str, str]],
+        icon_url: str | None,
+        uuid_errors: list[str],
+    ) -> None:
+        super().__init__(timeout=120)
+        self._instance_id = instance_id
+        self._region = region
+        self._server_key = server_key
+        self._display_name = display_name
+        self._motd = motd
+        self._max_players = max_players
+        self._gamemode = gamemode
+        self._ops_to_add = ops_to_add
+        self._whitelist_to_add = whitelist_to_add
+        self._icon_url = icon_url
+        self._uuid_errors = uuid_errors
+
+    def _disable_all(self) -> None:
+        for child in self.children:
+            child.disabled = True  # type: ignore[attr-defined]
+
+    @discord.ui.button(label="Démarrer et modifier", style=discord.ButtonStyle.green, emoji="▶️")
+    async def start_and_edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f":arrows_counterclockwise: Démarrage de l'instance `{self._instance_id}`…"
+        )
+        asyncio.create_task(self._start_then_edit(interaction))
+        self.stop()
+
+    @discord.ui.button(label="Annuler", style=discord.ButtonStyle.secondary, emoji="✖️")
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(":information_source: Modification des propriétés annulée.")
+        self.stop()
+
+    async def _start_then_edit(self, btn_interaction: discord.Interaction) -> None:
+        try:
+            ec2 = get_ec2_client(self._region)
+            await asyncio.to_thread(ec2.start_instances, InstanceIds=[self._instance_id])
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code != "IncorrectInstanceState":
+                await btn_interaction.followup.send(
+                    format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region)
+                )
+                return
+        except Exception as e:
+            await btn_interaction.followup.send(
+                format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region)
+            )
+            return
+
+        for _ in range(30):
+            await asyncio.sleep(10)
+            state = await asyncio.to_thread(get_instance_state, self._instance_id, self._region)
+            if state == "running":
+                break
+        else:
+            await btn_interaction.followup.send(
+                f":x: L'instance `{self._instance_id}` n'est pas passée à l'état **running** après 5 minutes.\n"
+                "Relancez `/properties` une fois l'instance démarrée."
+            )
+            return
+
+        await btn_interaction.followup.send(
+            ":white_check_mark: Instance démarrée — attente que SSH soit disponible (30s)…"
+        )
+        await asyncio.sleep(30)
+
+        success, result = await asyncio.to_thread(
+            edit_minecraft_properties,
+            self._server_key,
+            motd=self._motd,
+            max_players=self._max_players,
+            gamemode=self._gamemode,
+            ops_to_add=self._ops_to_add or None,
+            whitelist_to_add=self._whitelist_to_add or None,
+            icon_url=self._icon_url,
+        )
+
+        if success:
+            warning = ""
+            if self._motd or self._max_players is not None or self._gamemode:
+                warning = "\n\n:warning: Redémarrez le serveur pour appliquer les changements de `server.properties`."
+            error_note = ("\n\n:warning: " + "\n".join(self._uuid_errors)) if self._uuid_errors else ""
+            await btn_interaction.followup.send(
+                f":white_check_mark: **{self._display_name}** — propriétés mises à jour :\n\n{result}{warning}{error_note}"
+            )
+        else:
+            await btn_interaction.followup.send(
+                f":x: Erreur lors de la modification de **{self._display_name}** :\n{result}"
+            )
+
+
 class _InstanceStartView(discord.ui.View):
     """Boutons proposant de démarrer l'instance EC2 avant l'installation SSH."""
 
@@ -515,9 +626,48 @@ def setup(tree: app_commands.CommandTree) -> None:
         instance_state = await asyncio.to_thread(get_instance_state, instance_id, region)
         if instance_state != "running":
             state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
+
+            # Résoudre les UUIDs Mojang en avance pour les inclure dans la View
+            ops_to_add: list[tuple[str, str]] = []
+            whitelist_to_add: list[tuple[str, str]] = []
+            uuid_errors: list[str] = []
+
+            if add_admin:
+                try:
+                    uuid, canonical = await get_player_uuid(add_admin.strip())
+                    ops_to_add.append((uuid, canonical))
+                except ValueError as e:
+                    uuid_errors.append(str(e))
+
+            if add_whitelist:
+                for raw_name in add_whitelist.split(","):
+                    name = raw_name.strip()
+                    if not name:
+                        continue
+                    try:
+                        uuid, canonical = await get_player_uuid(name)
+                        whitelist_to_add.append((uuid, canonical))
+                    except ValueError as e:
+                        uuid_errors.append(str(e))
+
+            display_name = server_data.get("name", server)
+            view = _InstanceStartForPropertiesView(
+                instance_id=instance_id,
+                region=region,
+                server_key=server,
+                display_name=display_name,
+                motd=motd,
+                max_players=max_players,
+                gamemode=gamemode,
+                ops_to_add=ops_to_add,
+                whitelist_to_add=whitelist_to_add,
+                icon_url=icon_url,
+                uuid_errors=uuid_errors,
+            )
             await interaction.response.send_message(
-                f":x: L'instance EC2 est {state_label}. Démarrez l'instance avant de modifier les propriétés.",
-                ephemeral=True,
+                f":warning: L'instance `{instance_id}` est actuellement {state_label}.\n"
+                "Souhaitez-vous la démarrer pour modifier les propriétés maintenant ?",
+                view=view,
             )
             return
 
