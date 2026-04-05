@@ -119,6 +119,14 @@ def setup(tree: app_commands.CommandTree) -> None:
             try:
                 ssh_host = await asyncio.to_thread(get_instance_public_ip, instance_id, region)
             except Exception:
+                # Pas d'IP publique → l'instance est très probablement déjà arrêtée.
+                # On vérifie l'état EC2 avant de continuer.
+                instance_state = await asyncio.to_thread(_get_instance_state, instance_id, region)
+                if instance_state in ("stopped", "stopping"):
+                    await interaction.response.send_message(
+                        ":white_circle: Instance déjà stoppée.", ephemeral=True
+                    )
+                    return
                 ssh_host = None
 
         await interaction.response.defer()
