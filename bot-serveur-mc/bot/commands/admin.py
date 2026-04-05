@@ -234,6 +234,120 @@ class _InstanceStartView(discord.ui.View):
         )
 
 
+class _RemoveServerStartForDeleteView(discord.ui.View):
+    """Propose de démarrer l'instance stoppée pour pouvoir supprimer les fichiers du serveur."""
+
+    def __init__(
+        self,
+        *,
+        original_interaction: discord.Interaction,
+        server_key: str,
+        name: str,
+        instance_id: str,
+        region: str,
+        base_result: str,
+    ) -> None:
+        super().__init__(timeout=120)
+        self._orig = original_interaction
+        self._server_key = server_key
+        self._name = name
+        self._instance_id = instance_id
+        self._region = region
+        self._base_result = base_result
+
+    def _disable_all(self) -> None:
+        for child in self.children:
+            child.disabled = True  # type: ignore[attr-defined]
+
+    @discord.ui.button(label="Démarrer et supprimer", style=discord.ButtonStyle.danger, emoji="▶️")
+    async def start_and_delete(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(":arrows_counterclockwise: Démarrage de l'instance…", ephemeral=True)
+        asyncio.create_task(self._start_then_delete(interaction))
+        self.stop()
+
+    @discord.ui.button(label="Laisser les fichiers", style=discord.ButtonStyle.secondary, emoji="📁")
+    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self._disable_all()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            self._base_result + "\n:information_source: Les fichiers sur l'instance ont été conservés.",
+            ephemeral=True,
+        )
+        self.stop()
+
+    async def _start_then_delete(self, btn_interaction: discord.Interaction) -> None:
+        from bot.aws import get_ec2_client, get_instance_state
+        from bot.ssh import get_instance_public_ip
+        from botocore.exceptions import ClientError
+
+        try:
+            ec2 = get_ec2_client(self._region)
+            await asyncio.to_thread(ec2.start_instances, InstanceIds=[self._instance_id])
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "IncorrectInstanceState":
+                await btn_interaction.followup.send(
+                    self._base_result
+                    + "\n:warning: Impossible de démarrer l'instance : "
+                    + format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region),
+                    ephemeral=True,
+                )
+                return
+        except Exception as e:
+            await btn_interaction.followup.send(
+                self._base_result
+                + f"\n:warning: Impossible de démarrer l'instance : {e}",
+                ephemeral=True,
+            )
+            return
+
+        # Poll jusqu'à "running"
+        for _ in range(30):
+            await asyncio.sleep(10)
+            state = await asyncio.to_thread(get_instance_state, self._instance_id, self._region)
+            if state == "running":
+                break
+        else:
+            await btn_interaction.followup.send(
+                self._base_result
+                + f"\n:x: L'instance `{self._instance_id}` n'est pas passée à l'état **running** après 5 minutes.\n"
+                "Les fichiers n'ont pas été supprimés.",
+                ephemeral=True,
+            )
+            return
+
+        await btn_interaction.followup.send(":white_check_mark: Instance démarrée. Attente SSH (30s)…", ephemeral=True)
+        await asyncio.sleep(30)
+
+        try:
+            ssh_host = await asyncio.to_thread(get_instance_public_ip, self._instance_id, self._region)
+        except Exception as e:
+            await btn_interaction.followup.send(
+                self._base_result
+                + f"\n:warning: Impossible de récupérer l'IP de l'instance : {e}",
+                ephemeral=True,
+            )
+            return
+
+        delete_view = _RemoveServerDeleteView(
+            original_interaction=btn_interaction,
+            server_key=self._server_key,
+            name=self._name,
+            instance_id=self._instance_id,
+            region=self._region,
+            ssh_host=ssh_host,
+            base_result=self._base_result,
+        )
+        await btn_interaction.followup.send(
+            self._base_result
+            + f"\n\n:warning: Voulez-vous supprimer les fichiers sur l'instance ?\n"
+            f"(`rm -rf ~/minecraft-servers/{self._server_key}`)",
+            view=delete_view,
+            ephemeral=True,
+        )
+
+
 class _RemoveServerDeleteView(discord.ui.View):
     """Confirmation finale : supprimer les fichiers sur l'instance (rm -rf)."""
 
@@ -427,10 +541,27 @@ class _RemoveServerView(discord.ui.View):
                 view=delete_view,
                 ephemeral=True,
             )
+        elif self._instance_id and self._instance_id.startswith("i-"):
+            # Instance stoppée : proposer de la démarrer pour pouvoir supprimer les fichiers
+            start_view = _RemoveServerStartForDeleteView(
+                original_interaction=btn_interaction,
+                server_key=self._server_key,
+                name=self._name,
+                instance_id=self._instance_id,
+                region=self._region,
+                base_result=base_result,
+            )
+            await btn_interaction.followup.send(
+                base_result
+                + f"\n\n:warning: L'instance est arrêtée — impossible de supprimer les fichiers sans la démarrer.\n"
+                f"Voulez-vous démarrer l'instance pour supprimer `~/minecraft-servers/{self._server_key}` ?",
+                view=start_view,
+                ephemeral=True,
+            )
         else:
             await btn_interaction.followup.send(
                 base_result
-                + "\n:information_source: Hôte SSH inconnu, les fichiers sur l'instance ne seront pas supprimés.",
+                + "\n:information_source: Instance inconnue — les fichiers sur l'instance n'ont pas été supprimés.",
                 ephemeral=True,
             )
 
