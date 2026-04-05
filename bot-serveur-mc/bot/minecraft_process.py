@@ -391,6 +391,7 @@ set -e
 if ! command -v java &> /dev/null; then
     sudo yum install -y java-21-amazon-corretto-headless
 fi
+sudo yum install -y python3-pillow 2>/dev/null || sudo pip3 install Pillow -q 2>/dev/null || true
 mkdir -p /home/{_user}/minecraft-servers
 """
     success, output = ssh_execute(_host, _user, _key_path, install_cmd)
@@ -493,12 +494,16 @@ def setup_minecraft_server(
 
     server_dir = f"/home/{_user}/minecraft-servers/{server_key}"
     if icon_url:
-        icon_cmd = (
-            f'wget -q "{icon_url}" -O {server_dir}/server-icon.png.tmp && '
-            f'python3 -c "from PIL import Image; img = Image.open(\'{server_dir}/server-icon.png.tmp\').convert(\'RGBA\').resize((64,64), Image.LANCZOS); img.save(\'{server_dir}/server-icon.png\', \'PNG\')" && '
-            f'rm -f {server_dir}/server-icon.png.tmp || '
-            f'(convert "{server_dir}/server-icon.png.tmp" -resize 64x64! {server_dir}/server-icon.png && rm -f {server_dir}/server-icon.png.tmp) || true'
-        )
+        icon_cmd = f"""
+(
+  wget -q "{icon_url}" -O {server_dir}/server-icon.png.tmp && python3 - <<'PYEOF'
+from PIL import Image
+img = Image.open("{server_dir}/server-icon.png.tmp").convert("RGBA")
+img = img.resize((64, 64), Image.LANCZOS)
+img.save("{server_dir}/server-icon.png", "PNG")
+PYEOF
+  rm -f {server_dir}/server-icon.png.tmp
+) || true"""
     else:
         icon_cmd = ""
     command = f"""
@@ -672,12 +677,15 @@ def edit_minecraft_properties(
 
     # --- server-icon.png ---
     if icon_url:
-        parts.append(
-            f'wget -q "{icon_url}" -O {server_dir}/server-icon.png.tmp && '
-            f'python3 -c "from PIL import Image; img = Image.open(\'{server_dir}/server-icon.png.tmp\').convert(\'RGBA\').resize((64,64), Image.LANCZOS); img.save(\'{server_dir}/server-icon.png\', \'PNG\')" && '
-            f'rm -f {server_dir}/server-icon.png.tmp || '
-            f'(convert "{server_dir}/server-icon.png.tmp" -resize 64x64! {server_dir}/server-icon.png && rm -f {server_dir}/server-icon.png.tmp) || true'
-        )
+        parts.append(f"""(
+  wget -q "{icon_url}" -O {server_dir}/server-icon.png.tmp && python3 - <<'PYEOF'
+from PIL import Image
+img = Image.open("{server_dir}/server-icon.png.tmp").convert("RGBA")
+img = img.resize((64, 64), Image.LANCZOS)
+img.save("{server_dir}/server-icon.png", "PNG")
+PYEOF
+  rm -f {server_dir}/server-icon.png.tmp
+) || true""")
         changes.append(f"• icône mise à jour")
 
     if not changes:
