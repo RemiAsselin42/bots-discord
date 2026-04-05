@@ -7,7 +7,7 @@ from discord import app_commands
 
 from bot.minecraft_process import edit_minecraft_properties, setup_minecraft_server
 from bot.mojang import get_jar_url_for_version, get_player_uuid
-from bot.papermc import get_paper_jar_url
+from bot.papermc import get_paper_jar_url, get_viaversion_jar_url
 from bot.autocomplete import server_autocomplete, version_autocomplete
 from botocore.exceptions import ClientError
 
@@ -1194,12 +1194,20 @@ async def _run_ssh_setup(
     except Exception:
         jar_url = None  # Fallback sur MC_SERVER_JAR_URL par défaut
 
+    viaversion_url: str | None = None
+    if bedrock:
+        try:
+            viaversion_url = await get_viaversion_jar_url()
+        except Exception:
+            pass  # Le script shell échouera avec un message d'erreur explicite
+
     success, message = await asyncio.to_thread(
         setup_minecraft_server,
         server_key, port, jar_url=jar_url,
         motd=motd, max_players=max_players, gamemode=gamemode,
         seed=seed, icon_url=icon_url,
         bedrock=bedrock, bedrock_port=bedrock_port,
+        viaversion_url=viaversion_url,
     )
 
     if success:

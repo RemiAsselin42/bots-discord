@@ -8,7 +8,7 @@ import re
 
 import paramiko
 
-from bot.papermc import FLOODGATE_SPIGOT_URL, GEYSER_SPIGOT_URL, VIAVERSION_URL
+from bot.papermc import FLOODGATE_SPIGOT_URL, GEYSER_SPIGOT_URL
 from bot.ssh import _resolve_host, generate_rcon_password, load_ssh_key, ssh_execute
 
 logger = logging.getLogger(__name__)
@@ -464,6 +464,7 @@ def setup_minecraft_server(
     icon_url: str | None = None,
     bedrock: bool = False,
     bedrock_port: int | None = None,
+    viaversion_url: str | None = None,
 ) -> tuple[bool, str]:
     """
     Crée la structure d'un serveur Minecraft sur l'instance EC2 :
@@ -563,7 +564,7 @@ PROPS
 mkdir -p {server_dir}/plugins/Geyser-Spigot
 wget -nv "{GEYSER_SPIGOT_URL}" -O {server_dir}/plugins/Geyser-Spigot.jar
 wget -nv "{FLOODGATE_SPIGOT_URL}" -O {server_dir}/plugins/floodgate-spigot.jar
-wget -nv --max-redirect=5 "{VIAVERSION_URL}" -O {server_dir}/plugins/ViaVersion.jar
+wget -nv "{viaversion_url}" -O {server_dir}/plugins/ViaVersion.jar
 
 cat > {server_dir}/plugins/Geyser-Spigot/config.yml <<'GEYSER'
 bedrock:
@@ -588,7 +589,7 @@ GEYSER
             True,
             f"Serveur `{server_key}` configuré\n"
         )
-    return (False, f":x: Erreur lors de la configuration:\n{output}")
+    return (False, f":x: Erreur lors de la configuration:\n```\n{output}\n```")
 
 
 def _resolve_gamemode(gamemode: str) -> tuple[str, str]:

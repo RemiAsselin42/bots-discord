@@ -14,9 +14,20 @@ GEYSER_SPIGOT_URL = (
 FLOODGATE_SPIGOT_URL = (
     "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
 )
-VIAVERSION_URL = (
-    "https://hangar.papermc.io/api/v1/projects/ViaVersion/versions/latest/PAPER/download"
+HANGAR_VIAVERSION_LATEST_URL = (
+    "https://hangar.papermc.io/api/v1/projects/ViaVersion/latestrelease"
 )
+HANGAR_VIAVERSION_CDN_BASE = (
+    "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions"
+)
+
+
+async def get_viaversion_jar_url() -> str:
+    """Retourne l'URL CDN du dernier JAR ViaVersion pour Paper."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(HANGAR_VIAVERSION_LATEST_URL) as resp:
+            version = (await resp.text()).strip().strip('"')
+    return f"{HANGAR_VIAVERSION_CDN_BASE}/{version}/PAPER/ViaVersion-{version}.jar"
 
 
 async def get_paper_jar_url(version_id: str) -> str:
