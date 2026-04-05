@@ -695,7 +695,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         if bedrock:
             bedrock_info = (
                 f"• Bedrock: activé (port UDP `{bedrock_port}`)\n"
-                f"• Moteur: Paper + Geyser + Floodgate\n"
+                f"• Moteur: Paper + Geyser + Floodgate + ViaVersion\n"
             )
 
         base_confirm = (

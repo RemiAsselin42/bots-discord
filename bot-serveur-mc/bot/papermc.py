@@ -14,6 +14,9 @@ GEYSER_SPIGOT_URL = (
 FLOODGATE_SPIGOT_URL = (
     "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
 )
+VIAVERSION_URL = (
+    "https://hangar.papermc.io/api/v1/projects/ViaVersion/versions/latest/PAPER/download"
+)
 
 
 async def get_paper_jar_url(version_id: str) -> str:

@@ -8,7 +8,7 @@ import re
 
 import paramiko
 
-from bot.papermc import FLOODGATE_SPIGOT_URL, GEYSER_SPIGOT_URL
+from bot.papermc import FLOODGATE_SPIGOT_URL, GEYSER_SPIGOT_URL, VIAVERSION_URL
 from bot.ssh import _resolve_host, generate_rcon_password, load_ssh_key, ssh_execute
 
 logger = logging.getLogger(__name__)
@@ -558,10 +558,11 @@ PROPS
 
     if bedrock and bedrock_port:
         command += f"""
-# Geyser + Floodgate (Bedrock support)
+# Geyser + Floodgate + ViaVersion (Bedrock support)
 mkdir -p {server_dir}/plugins/Geyser-Spigot
 wget -q "{GEYSER_SPIGOT_URL}" -O {server_dir}/plugins/Geyser-Spigot.jar
 wget -q "{FLOODGATE_SPIGOT_URL}" -O {server_dir}/plugins/floodgate-spigot.jar
+wget -q --content-disposition "{VIAVERSION_URL}" -O {server_dir}/plugins/ViaVersion.jar
 
 cat > {server_dir}/plugins/Geyser-Spigot/config.yml <<'GEYSER'
 bedrock:
