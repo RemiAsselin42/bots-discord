@@ -1194,7 +1194,8 @@ async def _run_ssh_setup(
     except Exception:
         jar_url = None  # Fallback sur MC_SERVER_JAR_URL par défaut
 
-    success, message = setup_minecraft_server(
+    success, message = await asyncio.to_thread(
+        setup_minecraft_server,
         server_key, port, jar_url=jar_url,
         motd=motd, max_players=max_players, gamemode=gamemode,
         seed=seed, icon_url=icon_url,
