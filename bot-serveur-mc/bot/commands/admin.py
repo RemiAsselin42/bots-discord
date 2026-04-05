@@ -5,8 +5,8 @@ import re
 import discord
 from discord import app_commands
 
-from bot.minecraft_process import setup_minecraft_server
-from bot.mojang import get_jar_url_for_version
+from bot.minecraft_process import edit_minecraft_properties, setup_minecraft_server
+from bot.mojang import get_jar_url_for_version, get_player_uuid
 from bot.autocomplete import server_autocomplete, version_autocomplete
 from botocore.exceptions import ClientError
 
@@ -30,6 +30,11 @@ class _InstanceStartView(discord.ui.View):
         instance_id: str,
         region: str,
         version: str,
+        motd: str | None = None,
+        max_players: int = 20,
+        gamemode: str = "survival",
+        seed: str | None = None,
+        icon_url: str | None = None,
     ) -> None:
         super().__init__(timeout=120)
         self._orig = original_interaction
@@ -39,6 +44,11 @@ class _InstanceStartView(discord.ui.View):
         self._instance_id = instance_id
         self._region = region
         self._version = version
+        self._motd = motd
+        self._max_players = max_players
+        self._gamemode = gamemode
+        self._seed = seed
+        self._icon_url = icon_url
 
     def _disable_all(self) -> None:
         for child in self.children:
@@ -105,7 +115,9 @@ class _InstanceStartView(discord.ui.View):
         )
         await asyncio.sleep(30)
         await _run_ssh_setup(
-            self._orig, self._server_key, self._port, self._name, self._instance_id, self._region, self._version
+            self._orig, self._server_key, self._port, self._name, self._instance_id, self._region, self._version,
+            motd=self._motd, max_players=self._max_players, gamemode=self._gamemode,
+            seed=self._seed, icon_url=self._icon_url,
         )
 
 
@@ -118,7 +130,17 @@ def setup(tree: app_commands.CommandTree) -> None:
         ram="RAM allouée au serveur (ex: 2G, 1536M, 512M) — entiers uniquement",
         region="Région AWS de l'instance (ex: eu-north-1, eu-west-3, us-east-1)",
         version="Version de Minecraft (ex: 1.21.4, latest)",
+        motd="Description affichée dans la liste de serveurs (motd)",
+        max_players="Nombre maximum de joueurs (défaut: 20)",
+        gamemode="Mode de jeu par défaut",
+        seed="Graine de génération du monde",
+        icon_url="URL d'une image PNG 64×64 pour l'icône du serveur",
     )
+    @app_commands.choices(gamemode=[
+        app_commands.Choice(name="Survie", value="survival"),
+        app_commands.Choice(name="Créatif", value="creative"),
+        app_commands.Choice(name="Hardcore", value="hardcore"),
+    ])
     @app_commands.autocomplete(version=version_autocomplete)
     @require_guild
     async def createserver_command(
@@ -128,6 +150,11 @@ def setup(tree: app_commands.CommandTree) -> None:
         ram: str = "1536M",
         region: str = "eu-north-1",
         version: str = "latest",
+        motd: str | None = None,
+        max_players: int = 20,
+        gamemode: str = "survival",
+        seed: str | None = None,
+        icon_url: str | None = None,
     ):
 
         if not interaction.user.guild_permissions.administrator:
@@ -202,7 +229,11 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(
                 base_confirm + ":hourglass: **Installation en cours sur l'instance EC2...**"
             )
-            asyncio.create_task(_run_ssh_setup(interaction, key, port, name, instance_id, region, version))
+            asyncio.create_task(_run_ssh_setup(
+                interaction, key, port, name, instance_id, region, version,
+                motd=motd, max_players=max_players, gamemode=gamemode,
+                seed=seed, icon_url=icon_url,
+            ))
         else:
             state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
             view = _InstanceStartView(
@@ -213,6 +244,11 @@ def setup(tree: app_commands.CommandTree) -> None:
                 instance_id=instance_id,
                 region=region,
                 version=version,
+                motd=motd,
+                max_players=max_players,
+                gamemode=gamemode,
+                seed=seed,
+                icon_url=icon_url,
             )
             await interaction.response.send_message(
                 base_confirm
@@ -428,6 +464,119 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
+    # ── Propriétés Minecraft ─────────────────────────────────────────────────
+
+    @tree.command(name="properties", description="Modifie les propriétés d'un serveur Minecraft existant")
+    @app_commands.describe(
+        server="Sélectionnez le serveur à modifier",
+        motd="Description affichée dans la liste de serveurs (motd)",
+        max_players="Nombre maximum de joueurs (ex: 30)",
+        gamemode="Mode de jeu par défaut",
+        add_admin="Pseudo Minecraft à promouvoir opérateur",
+        add_whitelist="Pseudos à ajouter à la whitelist (séparés par virgule)",
+        icon_url="URL d'une image PNG 64×64 pour l'icône du serveur",
+    )
+    @app_commands.choices(gamemode=[
+        app_commands.Choice(name="Survie", value="survival"),
+        app_commands.Choice(name="Créatif", value="creative"),
+        app_commands.Choice(name="Hardcore", value="hardcore"),
+    ])
+    @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
+    async def properties_command(
+        interaction: discord.Interaction,
+        server: str,
+        motd: str | None = None,
+        max_players: int | None = None,
+        gamemode: str | None = None,
+        add_admin: str | None = None,
+        add_whitelist: str | None = None,
+        icon_url: str | None = None,
+    ):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                ":x: Seuls les administrateurs peuvent modifier les propriétés.", ephemeral=True
+            )
+            return
+
+        guild_str = str(interaction.guild.id)
+        config = load_config()
+
+        if guild_str not in config["guilds"] or server not in config["guilds"][guild_str]["servers"]:
+            await interaction.response.send_message(
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
+            )
+            return
+
+        server_data = config["guilds"][guild_str]["servers"][server]
+        instance_id = server_data.get("instance_id")
+        region = server_data.get("region", "eu-north-1")
+
+        instance_state = await asyncio.to_thread(get_instance_state, instance_id, region)
+        if instance_state != "running":
+            state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
+            await interaction.response.send_message(
+                f":x: L'instance EC2 est {state_label}. Démarrez l'instance avant de modifier les propriétés.",
+                ephemeral=True,
+            )
+            return
+
+        # Résoudre les UUIDs Mojang pour ops/whitelist
+        ops_to_add: list[tuple[str, str]] = []
+        whitelist_to_add: list[tuple[str, str]] = []
+        uuid_errors: list[str] = []
+
+        if add_admin:
+            try:
+                uuid, canonical = await get_player_uuid(add_admin.strip())
+                ops_to_add.append((uuid, canonical))
+            except ValueError as e:
+                uuid_errors.append(str(e))
+
+        if add_whitelist:
+            for raw_name in add_whitelist.split(","):
+                name = raw_name.strip()
+                if not name:
+                    continue
+                try:
+                    uuid, canonical = await get_player_uuid(name)
+                    whitelist_to_add.append((uuid, canonical))
+                except ValueError as e:
+                    uuid_errors.append(str(e))
+
+        if uuid_errors and not motd and max_players is None and gamemode is None and not ops_to_add and not whitelist_to_add and not icon_url:
+            await interaction.response.send_message(
+                ":x: " + "\n".join(uuid_errors), ephemeral=True
+            )
+            return
+
+        await interaction.response.defer()
+
+        success, result = await asyncio.to_thread(
+            edit_minecraft_properties,
+            server,
+            motd=motd,
+            max_players=max_players,
+            gamemode=gamemode,
+            ops_to_add=ops_to_add or None,
+            whitelist_to_add=whitelist_to_add or None,
+            icon_url=icon_url,
+        )
+
+        display_name = server_data.get("name", server)
+        if success:
+            warning = ""
+            if motd or max_players is not None or gamemode:
+                warning = "\n\n:warning: Redémarrez le serveur pour appliquer les changements de `server.properties`."
+            error_note = ("\n\n:warning: " + "\n".join(uuid_errors)) if uuid_errors else ""
+            await interaction.followup.send(
+                f":white_check_mark: **{display_name}** — propriétés mises à jour :\n\n{result}{warning}{error_note}"
+            )
+        else:
+            await interaction.followup.send(
+                f":x: Erreur lors de la modification de **{display_name}** :\n{result}"
+            )
+
     # ── Canal de notification ────────────────────────────────────────────────
 
     @tree.command(name="setchannel", description="Définit le canal Discord pour les notifications du bot")
@@ -464,6 +613,12 @@ async def _run_ssh_setup(
     instance_id: str,
     region: str,
     version: str = "latest",
+    *,
+    motd: str | None = None,
+    max_players: int = 20,
+    gamemode: str = "survival",
+    seed: str | None = None,
+    icon_url: str | None = None,
 ) -> None:
     """Lance le setup SSH et envoie un follow-up dans le canal."""
     try:
@@ -471,7 +626,11 @@ async def _run_ssh_setup(
     except Exception:
         jar_url = None  # Fallback sur MC_SERVER_JAR_URL par défaut
 
-    success, message = setup_minecraft_server(server_key, port, jar_url=jar_url)
+    success, message = setup_minecraft_server(
+        server_key, port, jar_url=jar_url,
+        motd=motd, max_players=max_players, gamemode=gamemode,
+        seed=seed, icon_url=icon_url,
+    )
 
     if success:
         duckdns_domain = os.getenv("DUCKDNS_DOMAIN")

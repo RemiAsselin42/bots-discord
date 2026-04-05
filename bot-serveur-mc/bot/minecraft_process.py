@@ -402,6 +402,11 @@ def setup_minecraft_server(
     user: str | None = None,
     key_path: str | None = None,
     jar_url: str | None = None,
+    motd: str | None = None,
+    max_players: int = 20,
+    gamemode: str = "survival",
+    seed: str | None = None,
+    icon_url: str | None = None,
 ) -> tuple[bool, str]:
     """
     Crée la structure d'un serveur Minecraft sur l'instance EC2 :
@@ -411,6 +416,7 @@ def setup_minecraft_server(
 
     Utilise MC_SERVER_* depuis l'env si les arguments ne sont pas fournis.
 
+    gamemode : "survival" | "creative" | "hardcore"
     Returns:
         (success, message)
     """
@@ -428,25 +434,30 @@ def setup_minecraft_server(
     rcon_port = port + 10
     rcon_password = generate_rcon_password()
 
+    _motd = motd or f"Serveur Minecraft - {server_key}"
+    _gamemode_value, _hardcore_value = _resolve_gamemode(gamemode)
+    _seed = seed or ""
+
     server_dir = f"/home/{_user}/minecraft-servers/{server_key}"
+    icon_cmd = f'wget -q "{icon_url}" -O {server_dir}/server-icon.png || true' if icon_url else ""
     command = f"""
 set -e
 mkdir -p {server_dir}
 
-    PROPS_FILE="{server_dir}/server.properties"
-    RCON_PORT_DEFAULT="{rcon_port}"
-    RCON_PASS_DEFAULT="{rcon_password}"
+PROPS_FILE="{server_dir}/server.properties"
+RCON_PORT_DEFAULT="{rcon_port}"
+RCON_PASS_DEFAULT="{rcon_password}"
 
-    if [ -f "$PROPS_FILE" ]; then
-        EXISTING_RCON_PORT=$(grep '^rcon.port=' "$PROPS_FILE" | cut -d= -f2 || true)
-        EXISTING_RCON_PASS=$(grep '^rcon.password=' "$PROPS_FILE" | cut -d= -f2 || true)
-        if [ -n "$EXISTING_RCON_PORT" ]; then
-            RCON_PORT_DEFAULT="$EXISTING_RCON_PORT"
-        fi
-        if [ -n "$EXISTING_RCON_PASS" ]; then
-            RCON_PASS_DEFAULT="$EXISTING_RCON_PASS"
-        fi
+if [ -f "$PROPS_FILE" ]; then
+    EXISTING_RCON_PORT=$(grep '^rcon.port=' "$PROPS_FILE" | cut -d= -f2 || true)
+    EXISTING_RCON_PASS=$(grep '^rcon.password=' "$PROPS_FILE" | cut -d= -f2 || true)
+    if [ -n "$EXISTING_RCON_PORT" ]; then
+        RCON_PORT_DEFAULT="$EXISTING_RCON_PORT"
     fi
+    if [ -n "$EXISTING_RCON_PASS" ]; then
+        RCON_PASS_DEFAULT="$EXISTING_RCON_PASS"
+    fi
+fi
 
 if [ ! -f {server_dir}/server.jar ]; then
     wget -q "{_jar_url}" -O {server_dir}/server.jar
@@ -454,20 +465,23 @@ fi
 
 echo "eula=true" > {server_dir}/eula.txt
 
-    cat > "$PROPS_FILE" <<PROPS
+cat > "$PROPS_FILE" <<PROPS
 server-port={port}
 enable-rcon=true
-    rcon.port=${{RCON_PORT_DEFAULT}}
-    rcon.password=${{RCON_PASS_DEFAULT}}
+rcon.port=${{RCON_PORT_DEFAULT}}
+rcon.password=${{RCON_PASS_DEFAULT}}
 enable-query=true
 query.port={port}
-max-players=20
-gamemode=survival
+max-players={max_players}
+gamemode={_gamemode_value}
+hardcore={_hardcore_value}
 difficulty=normal
 spawn-protection=16
 view-distance=10
-motd=Serveur Minecraft - {server_key}
+motd={_motd}
+level-seed={_seed}
 PROPS
+{icon_cmd}
 """
 
     success, output = ssh_execute(_host, _user, _key_path, command)
@@ -478,3 +492,135 @@ PROPS
             f"Serveur `{server_key}` configuré\n"
         )
     return (False, f":x: Erreur lors de la configuration:\n{output}")
+
+
+def _resolve_gamemode(gamemode: str) -> tuple[str, str]:
+    """Retourne (gamemode_value, hardcore_value) pour server.properties."""
+    if gamemode == "hardcore":
+        return "survival", "true"
+    if gamemode == "creative":
+        return "creative", "false"
+    return "survival", "false"
+
+
+def edit_minecraft_properties(
+    server_key: str,
+    *,
+    motd: str | None = None,
+    max_players: int | None = None,
+    gamemode: str | None = None,
+    ops_to_add: list[tuple[str, str]] | None = None,
+    whitelist_to_add: list[tuple[str, str]] | None = None,
+    icon_url: str | None = None,
+    host: str | None = None,
+    user: str | None = None,
+    key_path: str | None = None,
+) -> tuple[bool, str]:
+    """Modifie les propriétés d'un serveur Minecraft existant via SSH.
+
+    Utilise sed -i pour les propriétés dans server.properties,
+    Python 3 inline pour ops.json / whitelist.json.
+
+    gamemode : "survival" | "creative" | "hardcore"
+    ops_to_add / whitelist_to_add : liste de (uuid, name)
+
+    Returns:
+        (success, message)
+    """
+    _user = user or MC_SERVER_USER
+    _key_path = key_path or MC_SERVER_KEY_PATH
+
+    if not _key_path:
+        return (False, "Variable MC_SERVER_KEY_PATH requise.")
+    try:
+        _host = _resolve_host(host)
+    except Exception as e:
+        return (False, f"Impossible de résoudre l'hôte SSH : {e}")
+
+    server_dir = f"/home/{_user}/minecraft-servers/{server_key}"
+    props_file = f"{server_dir}/server.properties"
+
+    parts: list[str] = [f"set -e", f'PROPS="{props_file}"', ""]
+
+    changes: list[str] = []
+
+    # --- server.properties via sed ---
+    def _sed(key: str, value: str) -> str:
+        escaped = value.replace("/", r"\/").replace("&", r"\&")
+        return (
+            f'if grep -q "^{key}=" "$PROPS"; then\n'
+            f'    sed -i \'s/^{key}=.*/{key}={escaped}/\' "$PROPS"\n'
+            f"else\n"
+            f'    echo "{key}={value}" >> "$PROPS"\n'
+            f"fi"
+        )
+
+    if motd is not None:
+        parts.append(_sed("motd", motd))
+        changes.append(f"• motd: `{motd}`")
+
+    if max_players is not None:
+        parts.append(_sed("max-players", str(max_players)))
+        changes.append(f"• max-players: `{max_players}`")
+
+    if gamemode is not None:
+        gm_value, hc_value = _resolve_gamemode(gamemode)
+        parts.append(_sed("gamemode", gm_value))
+        parts.append(_sed("hardcore", hc_value))
+        changes.append(f"• gamemode: `{gamemode}`")
+
+    # --- ops.json via Python inline ---
+    if ops_to_add:
+        for uuid, name in ops_to_add:
+            safe_uuid = uuid.replace("'", "")
+            safe_name = name.replace("'", "")
+            parts.append(
+                f"python3 -c \"\n"
+                f"import json, os\n"
+                f"path = '{server_dir}/ops.json'\n"
+                f"ops = json.load(open(path)) if os.path.exists(path) else []\n"
+                f"if not any(o.get('uuid') == '{safe_uuid}' for o in ops):\n"
+                f"    ops.append({{'uuid': '{safe_uuid}', 'name': '{safe_name}', 'level': 4, 'bypassesPlayerLimit': False}})\n"
+                f"    json.dump(ops, open(path, 'w'), indent=2)\n"
+                f"    print('op ajouté : {safe_name}')\n"
+                f"else:\n"
+                f"    print('{safe_name} est déjà op')\n"
+                f"\""
+            )
+            changes.append(f"• op ajouté: `{name}`")
+
+    # --- whitelist.json via Python inline ---
+    if whitelist_to_add:
+        for uuid, name in whitelist_to_add:
+            safe_uuid = uuid.replace("'", "")
+            safe_name = name.replace("'", "")
+            parts.append(
+                f"python3 -c \"\n"
+                f"import json, os\n"
+                f"path = '{server_dir}/whitelist.json'\n"
+                f"wl = json.load(open(path)) if os.path.exists(path) else []\n"
+                f"if not any(e.get('uuid') == '{safe_uuid}' for e in wl):\n"
+                f"    wl.append({{'uuid': '{safe_uuid}', 'name': '{safe_name}'}})\n"
+                f"    json.dump(wl, open(path, 'w'), indent=2)\n"
+                f"    print('whitelist ajouté : {safe_name}')\n"
+                f"else:\n"
+                f"    print('{safe_name} est déjà dans la whitelist')\n"
+                f"\""
+            )
+            changes.append(f"• whitelist: `{name}`")
+
+    # --- server-icon.png ---
+    if icon_url:
+        parts.append(f'wget -q "{icon_url}" -O {server_dir}/server-icon.png')
+        changes.append(f"• icône mise à jour")
+
+    if not changes:
+        return (False, "Aucun paramètre fourni.")
+
+    command = "\n".join(parts)
+    success, output = ssh_execute(_host, _user, _key_path, command)
+
+    if success:
+        summary = "\n".join(changes)
+        return (True, summary)
+    return (False, f":x: Erreur SSH:\n{output}")
