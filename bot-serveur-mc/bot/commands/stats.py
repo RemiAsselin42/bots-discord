@@ -125,7 +125,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 state = instance_info["State"]["Name"]
                 if state != "running":
                     await interaction.followup.send(
-                        f":white_circle: **{name}** — Le serveur est arrêté (`{state}`). `0` joueur connecté."
+                        f":white_circle: Le serveur **{name}** est arrêté. `0` joueur connecté."
                     )
                     return
                 ec2_public_ip = instance_info.get("PublicIpAddress")
@@ -141,7 +141,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         )
         if ssh_ok and not java_running:
             await interaction.followup.send(
-                f":yellow_circle: **{name}** — L'instance EC2 est active mais le serveur Java est arrêté. `0` joueur connecté."
+                f":yellow_circle: Le serveur global est actif mais le serveur **{name}** est arrêté. `0` joueur connecté."
             )
             return
 
@@ -161,11 +161,11 @@ def setup(tree: app_commands.CommandTree) -> None:
         sample = status.players.sample or []
 
         if online == 0:
-            msg = f":busts_in_silhouette: **{name}** — `0/{max_players}` joueurs connectés."
+            msg = f":busts_in_silhouette: Il y a actuellement `0/{max_players}` joueur(s) connecté(s) sur **{name}**."
         else:
             player_names = ", ".join(p.name for p in sample) if sample else "noms non disponibles"
             msg = (
-                f":busts_in_silhouette: **{name}** — `{online}/{max_players}` joueur(s) connecté(s)\n"
+                f":busts_in_silhouette: Il y a actuellement `{online}/{max_players}` joueur(s) connecté(s) sur **{name}**.\n"
                 f":video_game: {player_names}"
             )
 

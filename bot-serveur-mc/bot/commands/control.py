@@ -136,7 +136,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 msg = (
                     f":x: Impossible d'arrêter le serveur **{name}** : "
                     "le serveur Minecraft ne répond pas (RCON refusé).\n"
-                    "Il est peut-être encore en cours de démarrage — réessayez dans quelques secondes."
+                    "Il est peut-être encore en cours de démarrage, veuillez réessayer dans quelques secondes."
                 )
             else:
                 host_info = ssh_host or "(résolution par défaut)"
@@ -158,8 +158,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             # → on conserve l'instance EC2 par précaution
             await interaction.followup.send(
                 f":red_circle: Le serveur **{name}** a été arrêté.\n"
-                ":warning: Impossible de vérifier les autres serveurs actifs (SSH injoignable) — "
-                "l'instance EC2 est conservée par précaution."
+                ":warning: Impossible de vérifier les autres serveurs actifs (SSH injoignable) donc l'instance EC2 est conservée par précaution."
             )
             return
 
@@ -167,7 +166,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             others_str = ", ".join(f"`{k}`" for k in running_others)
             await interaction.followup.send(
                 f":red_circle: Le serveur **{name}** a été arrêté.\n"
-                f":information_source: D'autres serveurs sont encore actifs ({others_str}) — l'instance EC2 reste en marche."
+                f":information_source: D'autres serveurs sont encore actifs ({others_str}) donc l'instance EC2 reste en marche."
             )
             return
 
@@ -296,7 +295,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         if instance_state != "running":
             state_label = instance_state or "injoignable"
             await interaction.response.send_message(
-                f":white_circle: **{name}** — Instance EC2 : **{state_label}**\n"
+                f":white_circle: Le serveur global de **{name}** est actuellement **{state_label}**\n"
                 f":zzz: Serveur Java : **arrêté** (instance non disponible)"
             )
             return

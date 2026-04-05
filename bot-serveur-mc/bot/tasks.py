@@ -170,7 +170,7 @@ async def notify_server_ready(
     if rcon_ready:
         extra = ""
         if not duckdns_ok:
-            extra = "\n:warning: La mise à jour DuckDNS a échoué — vérifiez le token/domaine."
+            extra = "\n:warning: La mise à jour DuckDNS a échoué : vérifiez le token/domaine."
         await channel.send(
             f":white_check_mark: Le serveur **{server_name}** est prêt ! Utilisez `/ip` pour obtenir l'adresse.{extra}"
         )
@@ -335,7 +335,7 @@ async def _check_and_stop_if_idle(
         # SSH indisponible : impossible de déterminer l'état des autres serveurs
         # → on conserve l'instance EC2 par précaution
         logger.warning(
-            "Auto-stop [%s] : SSH injoignable pour check_other_mc_servers_running — instance conservée",
+            "Auto-stop [%s] : SSH injoignable pour check_other_mc_servers_running donc instance conservée",
             name,
         )
         _idle_since.pop(key, None)
@@ -343,10 +343,9 @@ async def _check_and_stop_if_idle(
             channel = bot.get_channel(int(notification_channel_id))
             if channel:
                 await channel.send(
-                    f":yellow_circle: **Auto-stop** — Le serveur **{name}** a été arrêté "
+                    f":yellow_circle: **Auto-stop** : le serveur **{name}** a été arrêté "
                     f"après **{int(idle_minutes)} minutes** sans joueur. "
-                    ":warning: Impossible de vérifier les autres serveurs actifs (SSH injoignable) — "
-                    "l'instance EC2 est conservée par précaution."
+                    ":warning: Impossible de vérifier les autres serveurs actifs (SSH injoignable) donc l'instance EC2 est conservée par précaution."
                 )
         return
 
@@ -360,7 +359,7 @@ async def _check_and_stop_if_idle(
             channel = bot.get_channel(int(notification_channel_id))
             if channel:
                 await channel.send(
-                    f":yellow_circle: **Auto-stop** — Le serveur **{name}** a été arrêté "
+                    f":yellow_circle: **Auto-stop** : le serveur **{name}** a été arrêté "
                     f"après **{int(idle_minutes)} minutes** sans joueur. "
                     f"L'instance reste active (autres serveurs : {', '.join(running_others)})."
                 )
@@ -376,11 +375,11 @@ async def _check_and_stop_if_idle(
             channel = bot.get_channel(int(notification_channel_id))
             if channel:
                 await channel.send(
-                    f":red_circle: **Auto-stop** — Le serveur **{name}** a été arrêté automatiquement "
+                    f":red_circle: **Auto-stop** : le serveur **{name}** a été arrêté automatiquement "
                     f"après **{int(idle_minutes)} minutes** sans joueur connecté."
                 )
     except Exception as exc:
-        logger.error("Auto-stop [%s] : échec de l'arrêt EC2 — %s", name, exc)
+        logger.error("Auto-stop [%s] : échec de l'arrêt EC2 : %s", name, exc)
 
 
 def _resolve_mc_host(server_config: dict, ec2_client) -> str | None:

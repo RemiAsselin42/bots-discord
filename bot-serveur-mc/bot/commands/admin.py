@@ -121,7 +121,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
                 warning = f"\n\n:warning: Redémarrez le serveur avec `/restart {self._server_key}` pour appliquer les changements de `server.properties`."
             error_note = ("\n\n:warning: " + "\n".join(self._uuid_errors)) if self._uuid_errors else ""
             await btn_interaction.followup.send(
-                f":white_check_mark: **{self._display_name}** — propriétés mises à jour :\n\n{result}{warning}{error_note}"
+                f":white_check_mark: **{self._display_name}** propriétés mises à jour :\n\n{result}{warning}{error_note}"
             )
         else:
             await btn_interaction.followup.send(
@@ -430,7 +430,7 @@ class _RemoveServerView(discord.ui.View):
         else:
             await btn_interaction.followup.send(
                 base_result
-                + "\n:information_source: Hôte SSH inconnu — fichiers sur l'instance non supprimés.",
+                + "\n:information_source: Hôte SSH inconnu, les fichiers sur l'instance ne seront pas supprimés.",
                 ephemeral=True,
             )
 
@@ -441,7 +441,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.describe(
         name="Nom affiché du serveur",
         instance_id="ID de l'instance EC2 AWS (défaut: i-XXXXXXXXXXXXXXXXX)",
-        ram="RAM allouée au serveur (ex: 2G, 1536M, 512M) — entiers uniquement",
+        ram="RAM allouée au serveur (ex: 2G, 1536M, 512M) (entiers uniquement)",
         region="Région AWS de l'instance (ex: eu-north-1, eu-west-3, us-east-1)",
         version="Version de Minecraft (ex: 1.21.4, latest)",
         motd="Description affichée dans la liste de serveurs (motd)",
@@ -486,7 +486,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         ram_upper = ram.upper()
         if not re.match(r"^\d+[GM]$", ram_upper):
             await interaction.response.send_message(
-                ":x: Format de RAM invalide. Exemples : `2G`, `1536M`, `512M` (entiers uniquement — pas de décimales).",
+                ":x: Format de RAM invalide. Exemples : `2G`, `1536M`, `512M` (entiers uniquement, pas de décimales).",
                 ephemeral=True,
             )
             return
