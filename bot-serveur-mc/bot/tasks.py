@@ -95,8 +95,7 @@ async def notify_server_ready(
     channel = bot.get_channel(channel_id)
     if channel:
         await channel.send(
-            f":hourglass: **{server_name}** — Instance EC2 active. "
-            "Attente de la disponibilité SSH puis démarrage du serveur Minecraft…"
+            f":hourglass: Le serveur **{server_name}** est en cours de démarrage. "
         )
 
     # ── Phase 2 : mise à jour DuckDNS ───────────────────────────────────────
