@@ -8,6 +8,7 @@ import re
 
 import paramiko
 
+from bot.papermc import FLOODGATE_SPIGOT_URL, GEYSER_SPIGOT_URL
 from bot.ssh import _resolve_host, generate_rcon_password, load_ssh_key, ssh_execute
 
 logger = logging.getLogger(__name__)
@@ -461,6 +462,8 @@ def setup_minecraft_server(
     gamemode: str = "survival",
     seed: str | None = None,
     icon_url: str | None = None,
+    bedrock: bool = False,
+    bedrock_port: int | None = None,
 ) -> tuple[bool, str]:
     """
     Crée la structure d'un serveur Minecraft sur l'instance EC2 :
@@ -551,6 +554,27 @@ motd={_motd}
 level-seed={_seed}
 PROPS
 {icon_cmd}
+"""
+
+    if bedrock and bedrock_port:
+        command += f"""
+# Geyser + Floodgate (Bedrock support)
+mkdir -p {server_dir}/plugins/Geyser-Spigot
+wget -q "{GEYSER_SPIGOT_URL}" -O {server_dir}/plugins/Geyser-Spigot.jar
+wget -q "{FLOODGATE_SPIGOT_URL}" -O {server_dir}/plugins/floodgate-spigot.jar
+
+cat > {server_dir}/plugins/Geyser-Spigot/config.yml <<'GEYSER'
+bedrock:
+  address: 0.0.0.0
+  port: {bedrock_port}
+  clone-remote-port: false
+  motd1: "{_motd}"
+  motd2: ""
+remote:
+  address: auto
+  port: auto
+  auth-type: floodgate
+GEYSER
 """
 
     success, output = ssh_execute(_host, _user, _key_path, command)

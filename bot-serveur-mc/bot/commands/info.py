@@ -45,8 +45,13 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         if duckdns_domain:
             full_domain = resolve_duckdns_host(duckdns_domain)
+            bedrock_port = server_config.get("bedrock_port")
+            bedrock_info = ""
+            if bedrock_port:
+                bedrock_info = f"\n\n:video_game: **Bedrock :**\n```{full_domain}:{bedrock_port}```"
             await interaction.response.send_message(
-                f":globe_with_meridians: Adresse du serveur **{name}** :\n\n```{full_domain}:{minecraft_port}```"
+                f":globe_with_meridians: Adresse du serveur **{name}** :\n\n"
+                f":coffee: **Java :**\n```{full_domain}:{minecraft_port}```{bedrock_info}"
             )
             return
 
@@ -81,8 +86,13 @@ def setup(tree: app_commands.CommandTree) -> None:
                 await interaction.followup.send(f":x: Le serveur **{name}** n'a pas d'adresse IP publique.")
                 return
 
+            bedrock_port = server_config.get("bedrock_port")
+            bedrock_info = ""
+            if bedrock_port:
+                bedrock_info = f"\n\n:video_game: **Bedrock :**\n```{public_ip}:{bedrock_port}```"
             await interaction.followup.send(
-                f":globe_with_meridians: **Adresse du serveur {name} :**\n\n```{public_ip}:{minecraft_port}```"
+                f":globe_with_meridians: **Adresse du serveur {name} :**\n\n"
+                f":coffee: **Java :**\n```{public_ip}:{minecraft_port}```{bedrock_info}"
             )
         except Exception as e:
             await interaction.followup.send(

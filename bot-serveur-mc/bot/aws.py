@@ -25,19 +25,20 @@ def get_instance_state(instance_id: str, region: str) -> str | None:
         return None
 
 
-def manage_sg_port(instance_id: str, region: str, port: int, action: str) -> None:
-    """Ouvre ou ferme un port TCP dans le Security Group de l'instance EC2.
+def manage_sg_port(instance_id: str, region: str, port: int, action: str, protocol: str = "tcp") -> None:
+    """Ouvre ou ferme un port dans le Security Group de l'instance EC2.
 
     action: 'authorize' ou 'revoke'
+    protocol: 'tcp' ou 'udp' (défaut: 'tcp')
     """
     ec2 = get_ec2_client(region)
     response = ec2.describe_instances(InstanceIds=[instance_id])
     sg_id = response["Reservations"][0]["Instances"][0]["SecurityGroups"][0]["GroupId"]
     ip_permission = {
-        "IpProtocol": "tcp",
+        "IpProtocol": protocol,
         "FromPort": port,
         "ToPort": port,
-        "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": f"Minecraft port {port}"}],
+        "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": f"Minecraft port {port}/{protocol}"}],
     }
     try:
         if action == "authorize":

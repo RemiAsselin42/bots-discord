@@ -7,6 +7,7 @@ from discord import app_commands
 
 from bot.minecraft_process import edit_minecraft_properties, setup_minecraft_server
 from bot.mojang import get_jar_url_for_version, get_player_uuid
+from bot.papermc import get_paper_jar_url
 from bot.autocomplete import server_autocomplete, version_autocomplete
 from botocore.exceptions import ClientError
 
@@ -14,7 +15,7 @@ from bot.aws import format_boto_error, get_ec2_client, get_instance_state, manag
 from bot.config import load_config, save_config
 from bot.helpers import require_guild, resolve_duckdns_host, slugify_name
 from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_permission_summary
-from bot.port_manager import assign_port
+from bot.port_manager import assign_bedrock_port, assign_port
 
 
 class _InstanceStartForPropertiesView(discord.ui.View):
@@ -147,6 +148,8 @@ class _InstanceStartView(discord.ui.View):
         gamemode: str = "survival",
         seed: str | None = None,
         icon_url: str | None = None,
+        bedrock: bool = False,
+        bedrock_port: int | None = None,
     ) -> None:
         super().__init__(timeout=120)
         self._orig = original_interaction
@@ -161,6 +164,8 @@ class _InstanceStartView(discord.ui.View):
         self._gamemode = gamemode
         self._seed = seed
         self._icon_url = icon_url
+        self._bedrock = bedrock
+        self._bedrock_port = bedrock_port
 
     def _disable_all(self) -> None:
         for child in self.children:
@@ -231,6 +236,7 @@ class _InstanceStartView(discord.ui.View):
             self._orig, self._server_key, self._port, self._name, self._instance_id, self._region, self._version,
             motd=self._motd, max_players=self._max_players, gamemode=self._gamemode,
             seed=self._seed, icon_url=self._icon_url,
+            bedrock=self._bedrock, bedrock_port=self._bedrock_port,
         )
 
 
@@ -444,6 +450,7 @@ class _RemoveServerView(discord.ui.View):
         region: str,
         ssh_host: str | None,
         java_running: bool,
+        bedrock_port: int | None = None,
     ) -> None:
         super().__init__(timeout=120)
         self._orig = interaction
@@ -455,6 +462,7 @@ class _RemoveServerView(discord.ui.View):
         self._region = region
         self._ssh_host = ssh_host
         self._java_running = java_running
+        self._bedrock_port = bedrock_port
 
         if java_running:
             self.proceed.label = "Arrêter et supprimer"
@@ -521,6 +529,17 @@ class _RemoveServerView(discord.ui.View):
                     + format_boto_error(e, action="révoquer le port", instance_id=self._instance_id, region=self._region)
                 )
 
+        # Étape 3b : révocation du port Bedrock UDP
+        if self._bedrock_port and self._instance_id:
+            try:
+                await asyncio.to_thread(manage_sg_port, self._instance_id, self._region, self._bedrock_port, "revoke", "udp")
+                lines.append(f":white_check_mark: Port Bedrock `{self._bedrock_port}/udp` révoqué.")
+            except Exception as e:
+                lines.append(
+                    f":warning: Port Bedrock `{self._bedrock_port}/udp` non révoqué : "
+                    + format_boto_error(e, action="révoquer le port Bedrock", instance_id=self._instance_id, region=self._region)
+                )
+
         base_result = f":wastebasket: Serveur **{self._name}** (`{self._server_key}`) :\n" + "\n".join(lines)
 
         # Étape 4 : proposition de supprimer les fichiers sur l'instance
@@ -580,6 +599,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         gamemode="Mode de jeu par défaut",
         seed="Graine de génération du monde",
         icon_url="URL d'une image PNG 64×64 pour l'icône du serveur",
+        bedrock="Activer la compatibilité Bedrock (installe Paper + Geyser + Floodgate)",
     )
     @app_commands.choices(gamemode=[
         app_commands.Choice(name="Survie", value="survival"),
@@ -600,6 +620,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         gamemode: str = "survival",
         seed: str | None = None,
         icon_url: str | None = None,
+        bedrock: bool = False,
     ):
 
         if not interaction.user.guild_permissions.administrator:
@@ -642,6 +663,14 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(f":x: {e}", ephemeral=True)
             return
 
+        bedrock_port = None
+        if bedrock:
+            try:
+                bedrock_port = assign_bedrock_port(config, interaction.guild.id)
+            except ValueError as e:
+                await interaction.response.send_message(f":x: {e}", ephemeral=True)
+                return
+
         server_data: dict = {
             "name": name,
             "instance_id": instance_id,
@@ -651,6 +680,9 @@ def setup(tree: app_commands.CommandTree) -> None:
             "max_ram": ram_upper,
             "min_ram": "1G",
         }
+        if bedrock:
+            server_data["bedrock"] = True
+            server_data["bedrock_port"] = bedrock_port
         config["guilds"][guild_str]["servers"][key] = server_data
 
         try:
@@ -659,13 +691,21 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
             return
 
+        bedrock_info = ""
+        if bedrock:
+            bedrock_info = (
+                f"• Bedrock: activé (port UDP `{bedrock_port}`)\n"
+                f"• Moteur: Paper + Geyser + Floodgate\n"
+            )
+
         base_confirm = (
             f":white_check_mark: Serveur **{name}** enregistré avec succès !\n\n"
             f":clipboard: **Configuration :**\n"
             f"• Nom: `{name}`\n"
             f"• Port Minecraft: `{port}`\n"
             f"• RAM: `{ram_upper}`\n"
-            f"• Version: `{version}`\n\n"
+            f"• Version: `{version}`\n"
+            f"{bedrock_info}"
         )
 
         instance_state = await asyncio.to_thread(get_instance_state, instance_id, region)
@@ -678,6 +718,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 interaction, key, port, name, instance_id, region, version,
                 motd=motd, max_players=max_players, gamemode=gamemode,
                 seed=seed, icon_url=icon_url,
+                bedrock=bedrock, bedrock_port=bedrock_port,
             ))
         else:
             state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
@@ -694,6 +735,8 @@ def setup(tree: app_commands.CommandTree) -> None:
                 gamemode=gamemode,
                 seed=seed,
                 icon_url=icon_url,
+                bedrock=bedrock,
+                bedrock_port=bedrock_port,
             )
             await interaction.response.send_message(
                 base_confirm
@@ -747,6 +790,8 @@ def setup(tree: app_commands.CommandTree) -> None:
             except Exception:
                 java_running = False
 
+        bedrock_port = server_data.get("bedrock_port")
+
         view = _RemoveServerView(
             interaction=interaction,
             server_key=server,
@@ -757,6 +802,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             region=region,
             ssh_host=ssh_host,
             java_running=java_running,
+            bedrock_port=bedrock_port,
         )
 
         if java_running:
@@ -1130,10 +1176,21 @@ async def _run_ssh_setup(
     gamemode: str = "survival",
     seed: str | None = None,
     icon_url: str | None = None,
+    bedrock: bool = False,
+    bedrock_port: int | None = None,
 ) -> None:
     """Lance le setup SSH et envoie un follow-up dans le canal."""
+    if bedrock and bedrock_port is None:
+        await interaction.followup.send(
+            ":x: Erreur interne : `bedrock=True` mais aucun `bedrock_port` alloué.", ephemeral=True
+        )
+        return
+
     try:
-        jar_url = await get_jar_url_for_version(version)
+        if bedrock:
+            jar_url = await get_paper_jar_url(version)
+        else:
+            jar_url = await get_jar_url_for_version(version)
     except Exception:
         jar_url = None  # Fallback sur MC_SERVER_JAR_URL par défaut
 
@@ -1141,6 +1198,7 @@ async def _run_ssh_setup(
         server_key, port, jar_url=jar_url,
         motd=motd, max_players=max_players, gamemode=gamemode,
         seed=seed, icon_url=icon_url,
+        bedrock=bedrock, bedrock_port=bedrock_port,
     )
 
     if success:
@@ -1156,6 +1214,12 @@ async def _run_ssh_setup(
             sg_info = f""
         except Exception as e:
             sg_info = f"\n:warning: Port `{port}` non ouvert dans le Security Group : {format_boto_error(e, action='ouvrir le port', instance_id=instance_id, region=region)}"
+
+        if bedrock and bedrock_port:
+            try:
+                await asyncio.to_thread(manage_sg_port, instance_id, region, bedrock_port, "authorize", "udp")
+            except Exception as e:
+                sg_info += f"\n:warning: Port Bedrock `{bedrock_port}/udp` non ouvert : {format_boto_error(e, action='ouvrir le port Bedrock', instance_id=instance_id, region=region)}"
 
         await interaction.followup.send(
             f":tada: **Installation terminée !**\n\n{message}{extra}{sg_info}\n\n"
