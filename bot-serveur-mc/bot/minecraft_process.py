@@ -49,9 +49,11 @@ def start_minecraft_process(
 
     command = f"""
 set -e
-cd /home/{_user}/minecraft-servers/{server_key}
-    MC_PROC_PATTERN='[j]ava .*minecraft-servers/{server_key}/server.jar'
-    if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
+SERVER_DIR="/home/{_user}/minecraft-servers/{server_key}"
+JAR_PATH="$SERVER_DIR/server.jar"
+cd "$SERVER_DIR"
+MC_PROC_PATTERN="[j]ava .*$JAR_PATH"
+if pgrep -f "$MC_PROC_PATTERN" > /dev/null 2>&1; then
     echo "Already running"
     exit 0
 fi
@@ -63,7 +65,7 @@ fi
 # Bootstrap EULA : si absent/non valide, on fait un premier lancement
 # pour laisser Minecraft générer ses fichiers, puis on active eula=true.
 if [ ! -f eula.txt ] || ! grep -q '^eula=true$' eula.txt; then
-    setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > bootstrap.log 2>&1 &
+    setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar "$JAR_PATH" nogui < /dev/null > bootstrap.log 2>&1 &
     BOOT_PID=$!
 
     # Attendre que le processus se termine naturellement (extraction des libs, génération eula.txt)
@@ -95,7 +97,7 @@ if [ ! -f eula.txt ] || ! grep -q '^eula=true$' eula.txt; then
     fi
 fi
 
-setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar server.jar nogui < /dev/null > stdout.log 2>&1 &
+setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar "$JAR_PATH" nogui < /dev/null > stdout.log 2>&1 &
 # Attendre jusqu'à 90s que Java soit détecté par pgrep.
 # On se base uniquement sur pgrep (pas sur $! qui pointe le wrapper setsid/nohup, pas Java).
 # La génération du monde peut prendre 30-60s sur une petite instance.
@@ -137,7 +139,7 @@ def is_minecraft_process_running(
     except Exception:
         return (False, False)
 
-    command = f"pgrep -f '[j]ava .*minecraft-servers/{server_key}/server.jar' > /dev/null 2>&1 && echo running || echo stopped"
+    command = f"pgrep -f '[j]ava .*/minecraft-servers/{server_key}/server.jar' > /dev/null 2>&1 && echo running || echo stopped"
     ok, output = ssh_execute(_host, _user, _key_path, command, timeout=10)
     if not ok:
         return (False, False)
@@ -169,7 +171,7 @@ def check_other_mc_servers_running(
         return (False, [])
 
     command = f"""
-pgrep -af '[j]ava .*minecraft-servers/.*/server.jar' | grep -v "minecraft-servers/{exclude_server_key}/" || true
+pgrep -af '[j]ava .*/minecraft-servers/.*/server.jar' | grep -v "minecraft-servers/{exclude_server_key}/" || true
 """
     success, output = ssh_execute(_host, _user, _key_path, command, timeout=15)
     if not success:
@@ -211,7 +213,7 @@ def check_rcon_ready(
 set -e
 PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
 SERVER_DIR="/home/{_user}/minecraft-servers/{server_key}"
-MC_PROC_PATTERN='[j]ava .*minecraft-servers/{server_key}/server.jar'
+MC_PROC_PATTERN="[j]ava .*/minecraft-servers/{server_key}/server.jar"
 if [ ! -f "$PROPS" ]; then
     echo "Fichier server.properties introuvable : $PROPS"
     exit 1
@@ -272,7 +274,7 @@ def stop_minecraft_server(
     command = f"""
 set -e
 PROPS="/home/{_user}/minecraft-servers/{server_key}/server.properties"
-    MC_PROC_PATTERN='[j]ava .*minecraft-servers/{server_key}/server.jar'
+    MC_PROC_PATTERN="[j]ava .*/minecraft-servers/{server_key}/server.jar"
 if [ ! -f "$PROPS" ]; then
     echo "Fichier server.properties introuvable : $PROPS"
     exit 1
