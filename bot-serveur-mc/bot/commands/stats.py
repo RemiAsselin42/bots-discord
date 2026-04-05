@@ -112,6 +112,22 @@ def setup(tree: app_commands.CommandTree) -> None:
                 )
                 return
 
+        # Vérifier que l'instance EC2 est running avant de pinger Minecraft
+        instance_id = server_config.get("instance_id")
+        region = server_config.get("region", "eu-north-1")
+        if is_valid_instance_id(instance_id):
+            try:
+                ec2 = get_ec2_client(region)
+                resp = ec2.describe_instances(InstanceIds=[instance_id])
+                state = resp["Reservations"][0]["Instances"][0]["State"]["Name"]
+                if state != "running":
+                    await interaction.followup.send(
+                        f":white_circle: **{name}** — Le serveur est arrêté (`{state}`). `0` joueur connecté."
+                    )
+                    return
+            except Exception:
+                pass  # En cas d'erreur AWS, on tente quand même le ping
+
         # Ping Minecraft
         try:
             mc = JavaServer.lookup(f"{host}:{port}")
