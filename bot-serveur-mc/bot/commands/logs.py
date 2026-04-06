@@ -118,7 +118,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
-        header = f":scroll: **Logs — {name}** (dernières {n_lines} lignes)"
+        header = f":scroll: **Logs de {name}** ({n_lines} dernière(s) ligne(s))"
         messages = _split_for_discord(header, output.strip() or "(vide)")
 
         await interaction.followup.send(messages[0])
