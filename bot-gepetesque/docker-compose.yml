@@ -5,9 +5,3 @@ services:
     env_file: .env
     volumes:
       - ./bot.db:/app/bot.db
-    networks:
-      - bot-network
-
-networks:
-  bot-network:
-    external: true
