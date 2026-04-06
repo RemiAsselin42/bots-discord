@@ -13,9 +13,9 @@ from bot.helpers import is_valid_instance_id, require_guild, resolve_duckdns_hos
 def _format_bedrock_block(address: str, bedrock_port: int) -> str:
     return (
         f"\n**Bedrock :**\n"
-        f"Adresse : `{address}`\n"
-        f"Port : `{bedrock_port}`"
-    )
+        f"Adresse et Port : ```{address}```\n"
+        f"```{bedrock_port}```"  # format souhaité pour que le port soit sur une ligne séparée, améliorant la lisibilité
+    ) 
 
 
 def setup(tree: app_commands.CommandTree) -> None:
