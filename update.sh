@@ -5,7 +5,8 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "==> Pull des mises à jour Git..."
 cd "$REPO_DIR"
-git pull
+git fetch origin
+git reset --hard origin/main
 
 echo ""
 echo "==> Mise à jour de bot-gepetesque..."
