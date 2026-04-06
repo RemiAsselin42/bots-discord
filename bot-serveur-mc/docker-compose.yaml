@@ -5,7 +5,6 @@ services:
     env_file: .env
     restart: unless-stopped
     volumes:
-      - .:/app
       - ../keys/mc-host.pem:/keys/mc-host.pem:ro
     working_dir: /app
     # -u pour des logs non bufferisés
