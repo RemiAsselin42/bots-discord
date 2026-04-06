@@ -674,7 +674,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 counter += 1
 
         try:
-            port = assign_port(config, interaction.guild.id)
+            port = assign_port(config, interaction.guild.id, instance_id=instance_id)
         except ValueError as e:
             await interaction.response.send_message(f":x: {e}", ephemeral=True)
             return
@@ -682,7 +682,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         bedrock_port = None
         if bedrock:
             try:
-                bedrock_port = assign_bedrock_port(config, interaction.guild.id)
+                bedrock_port = assign_bedrock_port(config, interaction.guild.id, instance_id=instance_id)
             except ValueError as e:
                 await interaction.response.send_message(f":x: {e}", ephemeral=True)
                 return
