@@ -11,13 +11,13 @@ echo ""
 echo "==> Mise à jour de bot-gepetesque..."
 cd "$REPO_DIR/bot-gepetesque"
 docker-compose down
-docker-compose up -d --build
+docker-compose up -d --build --remove-orphans
 
 echo ""
 echo "==> Mise à jour de bot-serveur-mc..."
 cd "$REPO_DIR/bot-serveur-mc"
 docker-compose down
-docker-compose up -d --build
+docker-compose up -d --build --remove-orphans
 
 echo ""
 echo "==> Tous les bots sont à jour."
