@@ -62,6 +62,7 @@ wheels/
 # ============================================
 messageHistory.json
 allowedChannels.json
+servers_config.json
 *.db
 *.sqlite
 *.sqlite3
