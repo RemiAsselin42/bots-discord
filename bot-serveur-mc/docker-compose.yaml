@@ -1,7 +1,7 @@
 services:
-  bot:
+  serveur-mc:
     build: .
-    container_name: my-mc-bot
+    container_name: serveur-mc
     env_file: .env
     restart: unless-stopped
     volumes:

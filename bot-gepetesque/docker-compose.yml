@@ -1,6 +1,7 @@
 services:
-  bot-gepetesque:
+  gepetesque:
     build: .
+    container_name: gepetesque
     restart: always
     env_file: .env
     volumes:
