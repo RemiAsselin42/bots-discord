@@ -136,7 +136,6 @@ module.exports = {
     HISTORY_LIMIT,
     init,
     save,
-    tableHasColumn,
     queryAll,
     queryOne,
     run,

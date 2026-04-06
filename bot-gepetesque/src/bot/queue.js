@@ -178,13 +178,13 @@ async function processMessage(message) {
     if (response.status < 200 || response.status >= 300) {
         console.error(`DeepSeek a peut-être planté: statut = ${response.status}`);
         await message.reply("Désolé, le service semble indisponible pour le moment. Réessaie plus tard.");
-        return null; // signal d'erreur fatale
+        return false; // signal d'erreur fatale
     }
 
     if (!response.data.choices || response.data.choices.length === 0) {
         console.error("Réponse vide ou mal formattée de l'API DeepSeek:", response.data);
         await message.reply("Désolé, je n'ai pas pu générer de réponse. Réessaie plus tard.");
-        return null;
+        return false; // signal d'erreur fatale
     }
 
     const botResponse =
@@ -196,6 +196,7 @@ async function processMessage(message) {
     db.addMessage(channelId, botUser.username, botResponse, botUser.id);
     // Fire-and-forget — pas d'await intentionnel
     indexTopicsWithAI(userId, guildId, cleanMsg, botResponse);
+    return true;
 }
 
 // ─── Boucle de traitement de la file ─────────────────────────────────────────
@@ -229,7 +230,7 @@ async function processQueue() {
 
         try {
             const result = await processMessage(message);
-            if (result === null) break; // erreur fatale API
+            if (result === false) break; // erreur fatale API
         } catch (error) {
             if (error.code === "ECONNRESET") {
                 console.error("Connexion interrompue par le serveur.");

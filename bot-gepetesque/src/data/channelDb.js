@@ -111,6 +111,20 @@ function clearChannelSummary(channelId) {
 
 // ─── Suppression de messages par mot-clé ─────────────────────────────────────
 
+/**
+ * Supprime les messages d'un salon correspondant à l'un des mots-clés fournis,
+ * et retourne le nombre total de messages supprimés.
+ *
+ * Limitation : si deux mots-clés se chevauchent (ex. "hello" et "hello world"),
+ * un message peut correspondre aux deux patterns. Il sera supprimé dès le premier
+ * DELETE, mais `before.cnt` pour le second mot-clé aura déjà comptabilisé ces
+ * messages comme présents. En conséquence, `totalRemoved` peut être sur-estimé
+ * lorsque des mots-clés se chevauchent sémantiquement.
+ *
+ * Ce comportement est acceptable pour l'usage actuel (retour d'information
+ * approximatif à l'utilisateur), mais ne doit pas être utilisé pour un décompte
+ * exact de lignes supprimées en base.
+ */
 function removeChannelMessagesByKeywords(channelId, userId, username, keywords) {
     const raw = Array.isArray(keywords) ? keywords : [];
     const uniqueNeedles = [...new Set(raw.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean))];
@@ -136,16 +150,7 @@ function removeChannelMessagesByKeywords(channelId, userId, username, keywords) 
             [channelId, userId ?? null, username, `%${escaped}%`]
         );
 
-        const after = queryOne(
-            `SELECT COUNT(*) as cnt
-             FROM message_history
-             WHERE channel_id = ?
-               AND (user_id = ? OR (user_id IS NULL AND username = ?))
-               AND LOWER(content) LIKE ? ESCAPE '\\'`,
-            [channelId, userId ?? null, username, `%${escaped}%`]
-        );
-
-        totalRemoved += Number(before?.cnt || 0) - Number(after?.cnt || 0);
+        totalRemoved += Number(before?.cnt || 0);
     }
 
     if (totalRemoved > 0) save();
