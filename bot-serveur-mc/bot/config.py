@@ -7,6 +7,16 @@ config_lock = threading.Lock()
 
 GUILD_DEFAULT_PARAMS: Final[list[str]] = ["instance_id", "region", "hourly_cost", "max_ram"]
 
+# Types de serveurs Minecraft supportés.
+# Utiliser ces constantes plutôt que des chaînes littérales pour éviter les
+# problèmes d'encodage et garantir la cohérence entre les modules.
+SERVER_TYPE_VANILLA: Final[str] = "Vanilla"
+SERVER_TYPE_BEDROCK: Final[str] = "Bedrock"
+SERVER_TYPE_FABRIC: Final[str] = "Fabric"
+
+# Liste ordonnée utilisée pour les choix Discord et les validations.
+SERVER_TYPES: Final[list[str]] = [SERVER_TYPE_VANILLA, SERVER_TYPE_BEDROCK, SERVER_TYPE_FABRIC]
+
 # Coût horaire EC2 par défaut (t3.small eu-north-1, ~0.0416 $/h).
 # Mettre à jour si le type ou la région d'instance change.
 DEFAULT_HOURLY_COST: Final[float] = 0.0416
@@ -41,6 +51,20 @@ def get_server_config(guild_id: int, server_key: str, config: dict) -> dict | No
 def get_guild_defaults(guild_id: int, config: dict) -> dict:
     """Retourne les paramètres par défaut configurés pour la guild."""
     return config.get("guilds", {}).get(str(guild_id), {}).get("defaults", {})
+
+
+def get_optimization_mods(config: dict) -> list[str]:
+    """Retourne la liste des slugs Modrinth à installer sur un serveur Fabric.
+
+    Si une clé "optimization_mods" est définie dans la config globale, elle
+    prend le dessus sur la liste par défaut définie dans fabric.py. Cela permet
+    de personnaliser les mods sans modifier le code source.
+
+    Exemple dans servers_config.json :
+        { "optimization_mods": ["ferrite-core", "lithium"] }
+    """
+    from bot.fabric import OPTIMIZATION_MODS as _DEFAULT_MODS  # import local pour éviter les cycles
+    return config.get("optimization_mods", _DEFAULT_MODS)
 
 
 def set_guild_default(guild_id: int, param: str, value: str, config: dict) -> None:
