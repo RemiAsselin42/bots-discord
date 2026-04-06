@@ -6,7 +6,7 @@ import discord
 from discord import app_commands
 from dotenv import load_dotenv
 
-from bot.commands import admin, control, info, stats
+from bot.commands import admin, control, info, logs, stats
 from bot.minecraft_process import setup_host_instance
 from bot.tasks import auto_stop_loop
 
@@ -29,6 +29,7 @@ control.setup(tree)
 info.setup(tree)
 admin.setup(tree)
 stats.setup(tree)
+logs.setup(tree)
 
 
 async def _setup_host() -> None:

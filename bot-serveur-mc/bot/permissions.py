@@ -21,6 +21,7 @@ ALL_COMMANDS_VISIBILITY: Final[dict[str, str]] = {
     "stop":             "configurable",
     # Admin uniquement
     "restart":          "admin",
+    "logs":             "admin",
     "createserver":     "admin",
     "removeserver":     "admin",
     "editserver":       "admin",
