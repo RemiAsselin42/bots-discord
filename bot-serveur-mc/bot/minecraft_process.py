@@ -8,6 +8,7 @@ import re
 
 import paramiko
 
+from bot.config import SERVER_TYPE_BEDROCK, SERVER_TYPE_FABRIC, SERVER_TYPE_VANILLA
 from bot.papermc import FLOODGATE_SPIGOT_URL, GEYSER_SPIGOT_URL
 from bot.ssh import _resolve_host, generate_rcon_password, load_ssh_key, ssh_execute
 
@@ -462,9 +463,10 @@ def setup_minecraft_server(
     gamemode: str = "survival",
     seed: str | None = None,
     icon_url: str | None = None,
-    bedrock: bool = False,
+    server_type: str = SERVER_TYPE_VANILLA,
     bedrock_port: int | None = None,
     viaversion_url: str | None = None,
+    mod_urls: list[str] | None = None,
 ) -> tuple[bool, str]:
     """
     Crée la structure d'un serveur Minecraft sur l'instance EC2 :
@@ -558,7 +560,7 @@ PROPS
 {icon_cmd}
 """
 
-    if bedrock and bedrock_port:
+    if server_type == SERVER_TYPE_BEDROCK and bedrock_port:
         command += f"""
 # Geyser + Floodgate + ViaVersion (Bedrock support)
 mkdir -p {server_dir}/plugins/Geyser-Spigot
@@ -580,8 +582,20 @@ remote:
 GEYSER
 """
 
-    # Les téléchargements de JARs (Paper + plugins Bedrock) peuvent prendre plusieurs minutes
-    timeout = 300 if bedrock else 120
+    elif server_type == SERVER_TYPE_FABRIC and mod_urls:
+        mods_dir = f"{server_dir}/mods"
+        mod_download_cmds = "\n".join(
+            f'wget -nv "{url}" -P {mods_dir}/ || echo "WARNING: échec du téléchargement {url}"'
+            for url in mod_urls
+        )
+        command += f"""
+# Fabric mods d'optimisation
+mkdir -p {mods_dir}
+{mod_download_cmds}
+"""
+
+    # Les téléchargements de JARs (Paper/Fabric + plugins/mods) peuvent prendre plusieurs minutes
+    timeout = 300 if server_type in (SERVER_TYPE_BEDROCK, SERVER_TYPE_FABRIC) else 120
     success, output = ssh_execute(_host, _user, _key_path, command, timeout=timeout)
 
     if success:

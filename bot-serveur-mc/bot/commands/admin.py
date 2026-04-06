@@ -8,11 +8,12 @@ from discord import app_commands
 from bot.minecraft_process import edit_minecraft_properties, setup_minecraft_server
 from bot.mojang import get_jar_url_for_version, get_player_uuid
 from bot.papermc import get_paper_jar_url, get_viaversion_jar_url
+from bot.fabric import get_fabric_jar_url, get_modrinth_mod_url
 from bot.autocomplete import server_autocomplete, version_autocomplete
 from botocore.exceptions import ClientError
 
 from bot.aws import format_boto_error, get_ec2_client, get_instance_state, manage_sg_port
-from bot.config import DEFAULT_HOURLY_COST, GUILD_DEFAULT_PARAMS, get_guild_defaults, load_config, save_config, set_guild_default
+from bot.config import DEFAULT_HOURLY_COST, GUILD_DEFAULT_PARAMS, SERVER_TYPE_BEDROCK, SERVER_TYPE_FABRIC, SERVER_TYPE_VANILLA, get_guild_defaults, get_optimization_mods, load_config, save_config, set_guild_default
 from bot.helpers import require_admin, require_guild, resolve_duckdns_host, slugify_name
 from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_full_permission_summary, get_permission_summary
 from bot.port_manager import assign_bedrock_port, assign_port
@@ -148,7 +149,7 @@ class _InstanceStartView(discord.ui.View):
         gamemode: str = "survival",
         seed: str | None = None,
         icon_url: str | None = None,
-        bedrock: bool = False,
+        server_type: str = SERVER_TYPE_VANILLA,
         bedrock_port: int | None = None,
     ) -> None:
         super().__init__(timeout=120)
@@ -164,7 +165,7 @@ class _InstanceStartView(discord.ui.View):
         self._gamemode = gamemode
         self._seed = seed
         self._icon_url = icon_url
-        self._bedrock = bedrock
+        self._server_type = server_type
         self._bedrock_port = bedrock_port
 
     def _disable_all(self) -> None:
@@ -186,7 +187,8 @@ class _InstanceStartView(discord.ui.View):
         self._disable_all()
         await interaction.response.edit_message(view=self)
         bedrock_note = (
-            f"\n# Port Bedrock (UDP) : {self._bedrock_port}" if self._bedrock else ""
+            f"\n# Port Bedrock (UDP) : {self._bedrock_port}"
+            if self._server_type == SERVER_TYPE_BEDROCK and self._bedrock_port else ""
         )
         await interaction.followup.send(
             f":information_source: Installation reportée. Créez manuellement le dossier :\n"
@@ -240,7 +242,7 @@ class _InstanceStartView(discord.ui.View):
             self._orig, self._server_key, self._port, self._name, self._instance_id, self._region, self._version,
             motd=self._motd, max_players=self._max_players, gamemode=self._gamemode,
             seed=self._seed, icon_url=self._icon_url,
-            bedrock=self._bedrock, bedrock_port=self._bedrock_port,
+            server_type=self._server_type, bedrock_port=self._bedrock_port,
         )
 
 
@@ -613,8 +615,13 @@ def setup(tree: app_commands.CommandTree) -> None:
         gamemode="Mode de jeu par défaut",
         seed="Graine de génération du monde",
         icon_url="URL d'une image PNG 64×64 pour l'icône du serveur",
-        bedrock="Activer la compatibilité Bedrock (installe Paper + Geyser + Floodgate)",
+        server_type="Type de serveur (Vanilla, Bedrock avec Geyser, ou Fabric avec mods d'optimisation)",
     )
+    @app_commands.choices(server_type=[
+        app_commands.Choice(name="Vanilla", value=SERVER_TYPE_VANILLA),
+        app_commands.Choice(name="Bedrock", value=SERVER_TYPE_BEDROCK),
+        app_commands.Choice(name="Modé (Fabric)", value=SERVER_TYPE_FABRIC),
+    ])
     @app_commands.choices(gamemode=[
         app_commands.Choice(name="Survie", value="survival"),
         app_commands.Choice(name="Créatif", value="creative"),
@@ -635,7 +642,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         gamemode: str = "survival",
         seed: str | None = None,
         icon_url: str | None = None,
-        bedrock: bool = False,
+        server_type: str = SERVER_TYPE_VANILLA,
     ):
 
         guild_str = str(interaction.guild.id)
@@ -680,7 +687,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         bedrock_port = None
-        if bedrock:
+        if server_type == SERVER_TYPE_BEDROCK:
             try:
                 bedrock_port = assign_bedrock_port(config, interaction.guild.id, instance_id=instance_id)
             except ValueError as e:
@@ -697,8 +704,8 @@ def setup(tree: app_commands.CommandTree) -> None:
             "min_ram": "1G",
             "hourly_cost": hourly_cost,
         }
-        if bedrock:
-            server_data["bedrock"] = True
+        server_data["server_type"] = server_type
+        if server_type == SERVER_TYPE_BEDROCK:
             server_data["bedrock_port"] = bedrock_port
         config["guilds"][guild_str]["servers"][key] = server_data
 
@@ -708,12 +715,15 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
             return
 
-        bedrock_info = ""
-        if bedrock:
-            bedrock_info = (
-                f"• Bedrock: activé (port UDP `{bedrock_port}`)\n"
+        if server_type == SERVER_TYPE_BEDROCK:
+            type_info = (
+                f"• Type: Bedrock (port UDP `{bedrock_port}`)\n"
                 f"• Moteur: Paper + Geyser + Floodgate + ViaVersion\n"
             )
+        elif server_type == SERVER_TYPE_FABRIC:
+            type_info = "• Type: Fabric (mods d'optimisation inclus)\n"
+        else:
+            type_info = "• Type: Vanilla\n"
 
         base_confirm = (
             f":white_check_mark: Serveur **{name}** enregistré avec succès !\n\n"
@@ -722,7 +732,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             f"• Port Minecraft: `{port}`\n"
             f"• RAM: `{ram_upper}`\n"
             f"• Version: `{version}`\n"
-            f"{bedrock_info}"
+            f"{type_info}"
         )
 
         instance_state = await asyncio.to_thread(get_instance_state, instance_id, region)
@@ -735,7 +745,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 interaction, key, port, name, instance_id, region, version,
                 motd=motd, max_players=max_players, gamemode=gamemode,
                 seed=seed, icon_url=icon_url,
-                bedrock=bedrock, bedrock_port=bedrock_port,
+                server_type=server_type, bedrock_port=bedrock_port,
             ))
         else:
             state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
@@ -752,7 +762,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 gamemode=gamemode,
                 seed=seed,
                 icon_url=icon_url,
-                bedrock=bedrock,
+                server_type=server_type,
                 bedrock_port=bedrock_port,
             )
             await interaction.response.send_message(
@@ -1231,38 +1241,44 @@ async def _run_ssh_setup(
     gamemode: str = "survival",
     seed: str | None = None,
     icon_url: str | None = None,
-    bedrock: bool = False,
+    server_type: str = SERVER_TYPE_VANILLA,
     bedrock_port: int | None = None,
 ) -> None:
     """Lance le setup SSH et envoie un follow-up dans le canal."""
-    if bedrock and bedrock_port is None:
-        await interaction.followup.send(
-            ":x: Erreur interne : `bedrock=True` mais aucun `bedrock_port` alloué.", ephemeral=True
-        )
-        return
-
     try:
-        if bedrock:
+        if server_type == SERVER_TYPE_BEDROCK:
             jar_url, version = await get_paper_jar_url(version)
+        elif server_type == SERVER_TYPE_FABRIC:
+            jar_url, version = await get_fabric_jar_url(version)
         else:
             jar_url, version = await get_jar_url_for_version(version)
     except Exception:
         jar_url = None  # Fallback sur MC_SERVER_JAR_URL par défaut
 
     viaversion_url: str | None = None
-    if bedrock:
+    if server_type == SERVER_TYPE_BEDROCK:
         try:
             viaversion_url = await get_viaversion_jar_url()
         except Exception:
             pass  # Le script shell échouera avec un message d'erreur explicite
+
+    mod_urls: list[str] = []
+    if server_type == SERVER_TYPE_FABRIC:
+        config = load_config()
+        for slug in get_optimization_mods(config):
+            try:
+                mod_urls.append(await get_modrinth_mod_url(slug, version))
+            except Exception:
+                pass  # Mod indisponible pour cette version, ignoré silencieusement
 
     success, message = await asyncio.to_thread(
         setup_minecraft_server,
         server_key, port, jar_url=jar_url,
         motd=motd, max_players=max_players, gamemode=gamemode,
         seed=seed, icon_url=icon_url,
-        bedrock=bedrock, bedrock_port=bedrock_port,
+        server_type=server_type, bedrock_port=bedrock_port,
         viaversion_url=viaversion_url,
+        mod_urls=mod_urls or None,
     )
 
     if success:
@@ -1271,7 +1287,7 @@ async def _run_ssh_setup(
         if duckdns_domain:
             full_domain = resolve_duckdns_host(duckdns_domain)
             extra = f"\nDomaine: `{full_domain}:{port}`"
-            if bedrock and bedrock_port:
+            if server_type == SERVER_TYPE_BEDROCK and bedrock_port:
                 extra += f"\nBedrock: `{full_domain}:{bedrock_port}` (UDP)"
 
         sg_info = ""
@@ -1281,7 +1297,7 @@ async def _run_ssh_setup(
         except Exception as e:
             sg_info = f"\n:warning: Port `{port}` non ouvert dans le Security Group : {format_boto_error(e, action='ouvrir le port', instance_id=instance_id, region=region)}"
 
-        if bedrock and bedrock_port:
+        if server_type == SERVER_TYPE_BEDROCK and bedrock_port:
             try:
                 await asyncio.to_thread(manage_sg_port, instance_id, region, bedrock_port, "authorize", "udp")
             except Exception as e:
