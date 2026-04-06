@@ -1,17 +1,9 @@
 require("dotenv").config();
-const express = require("express");
 const { Client, GatewayIntentBits } = require("discord.js");
 const db = require("./data/db");
 const { migrateJsonIfNeeded } = require("./data/migrate");
 const { registerCommands, handleInteraction } = require("./bot/commands");
 const { enqueue, handleMessageUpdate, handleMessageDelete } = require("./bot/queue");
-
-// ─── Serveur HTTP keepalive ───────────────────────────────────────────────────
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get("/", (_req, res) => res.send("Bot is alive!"));
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 // ─── Client Discord ───────────────────────────────────────────────────────────
 
