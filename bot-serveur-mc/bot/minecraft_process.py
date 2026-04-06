@@ -703,6 +703,8 @@ def edit_minecraft_properties(
 
     # --- whitelist.json via Python inline ---
     if whitelist_to_add:
+        parts.append(_sed("white-list", "true"))
+        parts.append(_sed("enforce-whitelist", "true"))
         for uuid, name in whitelist_to_add:
             safe_uuid = uuid.replace("'", "")
             safe_name = name.replace("'", "")
