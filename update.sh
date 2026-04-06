@@ -22,4 +22,4 @@ docker-compose up -d --build --remove-orphans
 
 echo ""
 echo "==> Tous les bots sont à jour."
-docker ps --filter "name=bot"
+docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" | grep -E "gepetesque|serveur-mc"
