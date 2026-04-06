@@ -8,6 +8,7 @@ FABRIC_META_BASE = "https://meta.fabricmc.net/v2/versions"
 MODRINTH_API_BASE = "https://api.modrinth.com/v2"
 
 OPTIMIZATION_MODS: list[str] = [
+    "fabric-api",
     "ferrite-core",
     "lithium",
     "modernfix",
@@ -15,7 +16,6 @@ OPTIMIZATION_MODS: list[str] = [
     "krypton",
     "chunky",
     "noisium",
-    "c2me-fabric",
 ]
 
 
