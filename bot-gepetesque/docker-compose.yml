@@ -5,4 +5,4 @@ services:
     restart: always
     env_file: .env
     volumes:
-      - ./bot.db:/app/bot.db
+      - ./bot.db:/app/src/data/bot.db
