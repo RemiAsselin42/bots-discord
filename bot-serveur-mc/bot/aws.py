@@ -11,10 +11,6 @@ def get_ec2_client(region: str):
     return boto3.client("ec2", region_name=region)
 
 
-def get_cloudwatch_client(region: str):
-    return boto3.client("cloudwatch", region_name=region)
-
-
 def get_instance_state(instance_id: str, region: str) -> str | None:
     """Retourne l'état courant de l'instance EC2 ('running', 'stopped', etc.) ou None en cas d'erreur."""
     try:

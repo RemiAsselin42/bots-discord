@@ -48,7 +48,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 return
 
             try:
-                host = _get_ec2_public_ip(instance_id, region, name, server)
+                host = _get_ec2_public_ip(instance_id, region)
             except Exception as e:
                 await interaction.followup.send(
                     format_boto_error(e, action="récupérer l'IP", instance_id=instance_id, region=region),
@@ -122,7 +122,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         await interaction.followup.send(msg)
 
 
-def _get_ec2_public_ip(instance_id: str, region: str, name: str, server_key: str) -> str | None:
+def _get_ec2_public_ip(instance_id: str, region: str) -> str | None:
     ec2 = get_ec2_client(region)
     response = ec2.describe_instances(InstanceIds=[instance_id])
     if not response["Reservations"]:

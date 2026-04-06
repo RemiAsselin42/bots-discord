@@ -7,7 +7,7 @@ from bot.autocomplete import server_autocomplete
 from bot.aws import format_boto_error, get_ec2_client
 from bot.commands.helpers import get_uptime_and_cost
 from bot.config import get_guild_servers, get_server_config, load_config
-from bot.helpers import is_valid_instance_id, require_guild, resolve_duckdns_host
+from bot.helpers import format_uptime, is_valid_instance_id, require_guild, resolve_duckdns_host
 
 
 def _format_bedrock_block(address: str, bedrock_port: int) -> str:
@@ -146,7 +146,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(
                 f":bar_chart: **Uptime — {name}**\n\n"
                 f":green_circle: **État :** {data['state']}\n"
-                f":clock1: **En ligne depuis :** {data['delta'].days}j {data['hours'] % 24}h {data['minutes']}min\n"
+                f":clock1: **En ligne depuis :** {format_uptime(int(data['delta'].total_seconds()))}\n"
                 f":stopwatch: **Démarré le :** {data['launch_dt'].strftime('%d/%m/%Y à %H:%M')} UTC\n"
                 f":moneybag: **Coût horaire :** ${hourly_cost:.4f}/h\n"
                 f":chart_with_upwards_trend: **Coût total :** ${data['cost']:.4f}"

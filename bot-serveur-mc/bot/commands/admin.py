@@ -15,7 +15,7 @@ from botocore.exceptions import ClientError
 from bot.aws import format_boto_error, get_ec2_client, get_instance_state, manage_sg_port
 from bot.config import DEFAULT_HOURLY_COST, GUILD_DEFAULT_PARAMS, SERVER_TYPE_BEDROCK, SERVER_TYPE_FABRIC, SERVER_TYPE_VANILLA, get_guild_defaults, get_optimization_mods, load_config, save_config, set_guild_default
 from bot.helpers import require_admin, require_guild, resolve_duckdns_host, slugify_name
-from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_full_permission_summary, get_permission_summary
+from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_full_permission_summary
 from bot.port_manager import assign_bedrock_port, assign_port
 
 
@@ -1059,6 +1059,34 @@ def setup(tree: app_commands.CommandTree) -> None:
 
     # ── Propriétés Minecraft ─────────────────────────────────────────────────
 
+    async def _resolve_uuid_lists(
+        add_admin: str | None,
+        add_whitelist: str | None,
+    ) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[str]]:
+        ops_to_add: list[tuple[str, str]] = []
+        whitelist_to_add: list[tuple[str, str]] = []
+        uuid_errors: list[str] = []
+
+        if add_admin:
+            try:
+                uuid, canonical = await get_player_uuid(add_admin.strip())
+                ops_to_add.append((uuid, canonical))
+            except ValueError as e:
+                uuid_errors.append(str(e))
+
+        if add_whitelist:
+            for raw_name in add_whitelist.split(","):
+                name = raw_name.strip()
+                if not name:
+                    continue
+                try:
+                    uuid, canonical = await get_player_uuid(name)
+                    whitelist_to_add.append((uuid, canonical))
+                except ValueError as e:
+                    uuid_errors.append(str(e))
+
+        return ops_to_add, whitelist_to_add, uuid_errors
+
     @tree.command(name="properties", description="Modifie les propriétés d'un serveur Minecraft existant")
     @app_commands.describe(
         server="Sélectionnez le serveur à modifier",
@@ -1105,27 +1133,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
 
             # Résoudre les UUIDs Mojang en avance pour les inclure dans la View
-            ops_to_add: list[tuple[str, str]] = []
-            whitelist_to_add: list[tuple[str, str]] = []
-            uuid_errors: list[str] = []
-
-            if add_admin:
-                try:
-                    uuid, canonical = await get_player_uuid(add_admin.strip())
-                    ops_to_add.append((uuid, canonical))
-                except ValueError as e:
-                    uuid_errors.append(str(e))
-
-            if add_whitelist:
-                for raw_name in add_whitelist.split(","):
-                    name = raw_name.strip()
-                    if not name:
-                        continue
-                    try:
-                        uuid, canonical = await get_player_uuid(name)
-                        whitelist_to_add.append((uuid, canonical))
-                    except ValueError as e:
-                        uuid_errors.append(str(e))
+            ops_to_add, whitelist_to_add, uuid_errors = await _resolve_uuid_lists(add_admin, add_whitelist)
 
             display_name = server_data.get("name", server)
             view = _InstanceStartForPropertiesView(
@@ -1149,27 +1157,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         # Résoudre les UUIDs Mojang pour ops/whitelist
-        ops_to_add: list[tuple[str, str]] = []
-        whitelist_to_add: list[tuple[str, str]] = []
-        uuid_errors: list[str] = []
-
-        if add_admin:
-            try:
-                uuid, canonical = await get_player_uuid(add_admin.strip())
-                ops_to_add.append((uuid, canonical))
-            except ValueError as e:
-                uuid_errors.append(str(e))
-
-        if add_whitelist:
-            for raw_name in add_whitelist.split(","):
-                name = raw_name.strip()
-                if not name:
-                    continue
-                try:
-                    uuid, canonical = await get_player_uuid(name)
-                    whitelist_to_add.append((uuid, canonical))
-                except ValueError as e:
-                    uuid_errors.append(str(e))
+        ops_to_add, whitelist_to_add, uuid_errors = await _resolve_uuid_lists(add_admin, add_whitelist)
 
         if uuid_errors and not motd and max_players is None and gamemode is None and not ops_to_add and not whitelist_to_add and not icon_url:
             await interaction.response.send_message(
@@ -1293,7 +1281,7 @@ async def _run_ssh_setup(
         sg_info = ""
         try:
             await asyncio.to_thread(manage_sg_port, instance_id, region, port, "authorize")
-            sg_info = f""
+            sg_info = f"\n:white_check_mark: Port `{port}` ouvert dans le Security Group."
         except Exception as e:
             sg_info = f"\n:warning: Port `{port}` non ouvert dans le Security Group : {format_boto_error(e, action='ouvrir le port', instance_id=instance_id, region=region)}"
 
