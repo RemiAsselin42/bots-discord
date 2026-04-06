@@ -13,6 +13,9 @@ OPTIMIZATION_MODS: list[str] = [
     "modernfix",
     "memoryleakfix",
     "krypton",
+    "chunky",
+    "noisium",
+    "c2me-fabric",
 ]
 
 
