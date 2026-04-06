@@ -32,7 +32,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         lines = "\n".join(f"• **{data.get('name', key)}** (`{key}`)" for key, data in servers.items())
-        await interaction.response.send_message(f":desktop: **Serveurs Minecraft disponibles :**\n\n{lines}")
+        await interaction.response.send_message(f":desktop: Serveurs Minecraft disponibles :\n\n{lines}")
 
     @tree.command(name="ip", description="Obtient l'adresse IP ou le domaine du serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur")
