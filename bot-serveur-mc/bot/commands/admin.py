@@ -13,7 +13,7 @@ from botocore.exceptions import ClientError
 
 from bot.aws import format_boto_error, get_ec2_client, get_instance_state, manage_sg_port
 from bot.config import DEFAULT_HOURLY_COST, GUILD_DEFAULT_PARAMS, get_guild_defaults, load_config, save_config, set_guild_default
-from bot.helpers import require_guild, resolve_duckdns_host, slugify_name
+from bot.helpers import require_admin, require_guild, resolve_duckdns_host, slugify_name
 from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_full_permission_summary, get_permission_summary
 from bot.port_manager import assign_bedrock_port, assign_port
 
@@ -622,6 +622,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     ])
     @app_commands.autocomplete(version=version_autocomplete)
     @require_guild
+    @require_admin
     async def createserver_command(
         interaction: discord.Interaction,
         name: str,
@@ -636,12 +637,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         icon_url: str | None = None,
         bedrock: bool = False,
     ):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent créer des serveurs.", ephemeral=True
-            )
-            return
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -771,13 +766,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.describe(server="Sélectionnez le serveur à supprimer")
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
+    @require_admin
     async def removeserver_command(interaction: discord.Interaction, server: str):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent supprimer des serveurs.", ephemeral=True
-            )
-            return
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -852,6 +842,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     )
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
+    @require_admin
     async def editserver_command(
         interaction: discord.Interaction,
         server: str,
@@ -860,12 +851,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         region: str | None = None,
         hourly_cost: float | None = None,
     ):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent modifier des serveurs.", ephemeral=True
-            )
-            return
 
         if instance_id is not None and (not instance_id.startswith("i-") or len(instance_id) != 19):
             await interaction.response.send_message(
@@ -922,13 +907,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     )
     @app_commands.choices(command=[app_commands.Choice(name=c, value=c) for c in CONFIGURABLE_COMMANDS])
     @require_guild
+    @require_admin
     async def setpermission_command(interaction: discord.Interaction, command: str, role: discord.Role):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent modifier les permissions.", ephemeral=True
-            )
-            return
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -953,13 +933,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.describe(command="Commande à réinitialiser")
     @app_commands.choices(command=[app_commands.Choice(name=c, value=c) for c in CONFIGURABLE_COMMANDS])
     @require_guild
+    @require_admin
     async def resetpermission_command(interaction: discord.Interaction, command: str):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent modifier les permissions.", ephemeral=True
-            )
-            return
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -979,13 +954,8 @@ def setup(tree: app_commands.CommandTree) -> None:
 
     @tree.command(name="listpermissions", description="Affiche les permissions de toutes les commandes")
     @require_guild
+    @require_admin
     async def listpermissions_command(interaction: discord.Interaction):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent voir les permissions.", ephemeral=True
-            )
-            return
 
         config = load_config()
         summary = get_full_permission_summary(interaction.guild.id, config)
@@ -1031,13 +1001,8 @@ def setup(tree: app_commands.CommandTree) -> None:
         app_commands.Choice(name="RAM maximale",      value="max_ram"),
     ])
     @require_guild
+    @require_admin
     async def setdefault_command(interaction: discord.Interaction, parameter: str, value: str):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent définir des paramètres par défaut.", ephemeral=True
-            )
-            return
 
         config = load_config()
         try:
@@ -1056,13 +1021,8 @@ def setup(tree: app_commands.CommandTree) -> None:
 
     @tree.command(name="showdefaults", description="Affiche les paramètres par défaut configurés pour ce serveur Discord")
     @require_guild
+    @require_admin
     async def showdefaults_command(interaction: discord.Interaction):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent voir les paramètres par défaut.", ephemeral=True
-            )
-            return
 
         config = load_config()
         defaults = get_guild_defaults(interaction.guild.id, config)
@@ -1106,6 +1066,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     ])
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
+    @require_admin
     async def properties_command(
         interaction: discord.Interaction,
         server: str,
@@ -1116,12 +1077,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         add_whitelist: str | None = None,
         icon_url: str | None = None,
     ):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent modifier les propriétés.", ephemeral=True
-            )
-            return
-
         guild_str = str(interaction.guild.id)
         config = load_config()
 
@@ -1244,13 +1199,8 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="setchannel", description="Définit le canal Discord pour les notifications du bot")
     @app_commands.describe(channel="Canal où envoyer les notifications (auto-stop, etc.)")
     @require_guild
+    @require_admin
     async def setchannel_command(interaction: discord.Interaction, channel: discord.TextChannel):
-
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message(
-                ":x: Seuls les administrateurs peuvent configurer les canaux.", ephemeral=True
-            )
-            return
 
         guild_str = str(interaction.guild.id)
         config = load_config()
