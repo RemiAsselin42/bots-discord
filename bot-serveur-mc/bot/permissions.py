@@ -63,6 +63,8 @@ def check_permission(interaction: discord.Interaction, command: str, config: dic
     if not interaction.guild:
         return False
 
+    assert isinstance(interaction.user, discord.Member)
+
     # 1. Admins toujours autorisés
     if interaction.user.guild_permissions.administrator:
         return True

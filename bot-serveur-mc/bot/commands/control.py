@@ -23,7 +23,7 @@ def _get_instance_state(instance_id: str, region: str) -> str | None:
     try:
         ec2 = get_ec2_client(region)
         resp = ec2.describe_instances(InstanceIds=[instance_id])
-        return resp["Reservations"][0]["Instances"][0]["State"]["Name"]
+        return str(resp["Reservations"][0]["Instances"][0]["State"]["Name"])
     except Exception:
         return None
 
@@ -35,6 +35,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
     async def start_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
 
         config = load_config()
 
@@ -59,8 +60,11 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
+        assert isinstance(instance_id, str)
         name = server_config.get("name", server)
         region = server_config.get("region", "eu-north-1")
+        channel_id = interaction.channel_id
+        assert channel_id is not None
 
         try:
             current_state = await asyncio.to_thread(_get_instance_state, instance_id, region)
@@ -78,7 +82,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             asyncio.create_task(
                 notify_server_ready(
                     bot=interaction.client,
-                    channel_id=interaction.channel_id,
+                    channel_id=channel_id,
                     server_name=name,
                     instance_id=instance_id,
                     region=region,
@@ -99,6 +103,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
     async def stop_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
 
         config = load_config()
 
@@ -207,6 +212,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
     async def restart_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
 
         config = load_config()
 
@@ -262,10 +268,12 @@ def setup(tree: app_commands.CommandTree) -> None:
             f":arrows_counterclockwise: Le serveur **{name}** redémarre… Je vous notifie dès qu'il est prêt !"
         )
 
+        restart_channel_id = interaction.channel_id
+        assert restart_channel_id is not None
         asyncio.create_task(
             notify_restart_ready(
                 bot=interaction.client,
-                channel_id=interaction.channel_id,
+                channel_id=restart_channel_id,
                 server_name=name,
                 server_key=server,
                 ssh_host=ssh_host,
@@ -277,6 +285,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
     async def status_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
@@ -293,6 +302,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
+        assert isinstance(instance_id, str)
         name = server_config.get("name", server)
         region = server_config.get("region", "eu-north-1")
         try:

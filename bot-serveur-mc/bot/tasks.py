@@ -81,7 +81,7 @@ async def notify_server_ready(
 
     if elapsed >= timeout and public_ip is None:
         channel = bot.get_channel(channel_id)
-        if channel:
+        if isinstance(channel, discord.abc.Messageable):
             await channel.send(
                 f":warning: Le serveur **{server_name}** met plus de {timeout // 60} minutes à démarrer. "
                 "Vérifiez la console AWS."
@@ -97,7 +97,7 @@ async def notify_server_ready(
 
     # Progression intermédiaire : EC2 prêt, SSH en attente
     channel = bot.get_channel(channel_id)
-    if channel:
+    if isinstance(channel, discord.abc.Messageable):
         await channel.send(f":hourglass: Le serveur **{server_name}** est en cours de démarrage. ")
 
     # ── Phase 2 : mise à jour DuckDNS ───────────────────────────────────────
@@ -171,7 +171,7 @@ async def notify_server_ready(
 
     # ── Phase 5 : notifier dans Discord ─────────────────────────────────────
     channel = bot.get_channel(channel_id)
-    if not channel:
+    if not isinstance(channel, discord.abc.Messageable):
         return
 
     if rcon_ready:
@@ -220,12 +220,12 @@ async def notify_restart_ready(
         ok, _ = await asyncio.to_thread(check_rcon_ready, server_key, host=ssh_host)
         if ok:
             channel = bot.get_channel(channel_id)
-            if channel:
+            if isinstance(channel, discord.abc.Messageable):
                 await channel.send(f":white_check_mark: Le serveur **{server_name}** est prêt !")
             return
 
     channel = bot.get_channel(channel_id)
-    if channel:
+    if isinstance(channel, discord.abc.Messageable):
         await channel.send(
             f":warning: Le serveur **{server_name}** n'a pas répondu après redémarrage (timeout RCON)."
         )
@@ -342,7 +342,7 @@ async def _check_and_stop_if_idle(
             )
             if notification_channel_id:
                 channel = bot.get_channel(int(notification_channel_id))
-                if channel:
+                if isinstance(channel, discord.abc.Messageable):
                     await channel.send(
                         f":red_circle: **Auto-stop (zombie)** : l'instance du serveur **{name}** a été arrêtée "
                         "automatiquement car le processus Java n'est plus en cours d'exécution "
@@ -366,7 +366,9 @@ async def _check_and_stop_if_idle(
         logger.debug("Auto-stop [%s] : démarrage du compteur d'inactivité", name)
         return
 
-    idle_minutes = (now - _idle_since[key]).total_seconds() / 60
+    idle_since = _idle_since[key]
+    assert idle_since is not None
+    idle_minutes = (now - idle_since).total_seconds() / 60
     if idle_minutes < idle_timeout:
         return
 
@@ -394,7 +396,7 @@ async def _check_and_stop_if_idle(
         _idle_since.pop(key, None)
         if notification_channel_id:
             channel = bot.get_channel(int(notification_channel_id))
-            if channel:
+            if isinstance(channel, discord.abc.Messageable):
                 await channel.send(
                     f":yellow_circle: **Auto-stop** : le serveur **{name}** a été arrêté "
                     f"après **{int(idle_minutes)} minutes** sans joueur. "
@@ -411,7 +413,7 @@ async def _check_and_stop_if_idle(
         _idle_since.pop(key, None)
         if notification_channel_id:
             channel = bot.get_channel(int(notification_channel_id))
-            if channel:
+            if isinstance(channel, discord.abc.Messageable):
                 await channel.send(
                     f":yellow_circle: **Auto-stop** : le serveur **{name}** a été arrêté "
                     f"après **{int(idle_minutes)} minutes** sans joueur. "
@@ -429,7 +431,7 @@ async def _check_and_stop_if_idle(
 
         if notification_channel_id:
             channel = bot.get_channel(int(notification_channel_id))
-            if channel:
+            if isinstance(channel, discord.abc.Messageable):
                 await channel.send(
                     f":red_circle: **Auto-stop** : le serveur **{name}** a été arrêté automatiquement "
                     f"après **{int(idle_minutes)} minutes** sans joueur connecté."
@@ -455,6 +457,7 @@ def _resolve_mc_host(server_config: dict, ec2_client) -> str | None:
     try:
         response = ec2_client.describe_instances(InstanceIds=[instance_id])
         instance = response["Reservations"][0]["Instances"][0]
-        return instance.get("PublicIpAddress")
+        ip = instance.get("PublicIpAddress")
+        return str(ip) if ip is not None else None
     except Exception:
         return None

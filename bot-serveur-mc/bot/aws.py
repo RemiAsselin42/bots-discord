@@ -16,7 +16,7 @@ def get_instance_state(instance_id: str, region: str) -> str | None:
     try:
         ec2 = get_ec2_client(region)
         resp = ec2.describe_instances(InstanceIds=[instance_id])
-        return resp["Reservations"][0]["Instances"][0]["State"]["Name"]
+        return str(resp["Reservations"][0]["Instances"][0]["State"]["Name"])
     except Exception:
         return None
 

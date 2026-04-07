@@ -19,6 +19,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
     async def players_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
@@ -47,6 +48,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 )
                 return
 
+            assert isinstance(instance_id, str)
             try:
                 host = _get_ec2_public_ip(instance_id, region)
             except Exception as e:
@@ -132,4 +134,5 @@ def _get_ec2_public_ip(instance_id: str, region: str) -> str | None:
     instance = response["Reservations"][0]["Instances"][0]
     if instance["State"]["Name"] != "running":
         return None
-    return instance.get("PublicIpAddress")
+    ip = instance.get("PublicIpAddress")
+    return str(ip) if ip is not None else None

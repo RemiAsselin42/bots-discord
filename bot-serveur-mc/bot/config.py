@@ -1,7 +1,7 @@
 import json
 import re
 import threading
-from typing import Final
+from typing import Any, Final, cast
 
 config_lock = threading.Lock()
 
@@ -22,12 +22,12 @@ SERVER_TYPES: Final[list[str]] = [SERVER_TYPE_VANILLA, SERVER_TYPE_BEDROCK, SERV
 DEFAULT_HOURLY_COST: Final[float] = 0.0416
 
 
-def load_config() -> dict:
+def load_config() -> dict[str, Any]:
     try:
         with config_lock, open("servers_config.json", encoding="utf-8") as f:
-            return json.load(f)
+            return cast(dict[str, Any], json.load(f))
     except FileNotFoundError:
-        default = {"guilds": {}}
+        default: dict[str, Any] = {"guilds": {}}
         save_config(default)
         return default
 
@@ -37,10 +37,10 @@ def save_config(config_data: dict) -> None:
         json.dump(config_data, f, indent=2, ensure_ascii=False)
 
 
-def get_guild_servers(guild_id: int, config: dict) -> dict:
+def get_guild_servers(guild_id: int, config: dict[str, Any]) -> dict[str, Any]:
     """Retourne les serveurs Minecraft d'une guild Discord."""
-    guild_data: dict = config["guilds"].get(str(guild_id), {})
-    return guild_data.get("servers", {})
+    guild_data: dict[str, Any] = config["guilds"].get(str(guild_id), {})
+    return cast(dict[str, Any], guild_data.get("servers", {}))
 
 
 def get_server_config(guild_id: int, server_key: str, config: dict) -> dict | None:
@@ -48,12 +48,12 @@ def get_server_config(guild_id: int, server_key: str, config: dict) -> dict | No
     return get_guild_servers(guild_id, config).get(server_key)
 
 
-def get_guild_defaults(guild_id: int, config: dict) -> dict:
+def get_guild_defaults(guild_id: int, config: dict[str, Any]) -> dict[str, Any]:
     """Retourne les paramètres par défaut configurés pour la guild."""
-    return config.get("guilds", {}).get(str(guild_id), {}).get("defaults", {})
+    return cast(dict[str, Any], config.get("guilds", {}).get(str(guild_id), {}).get("defaults", {}))
 
 
-def get_optimization_mods(config: dict) -> list[str]:
+def get_optimization_mods(config: dict[str, Any]) -> list[str]:
     """Retourne la liste des slugs Modrinth à installer sur un serveur Fabric.
 
     Si une clé "optimization_mods" est définie dans la config globale, elle
@@ -65,7 +65,7 @@ def get_optimization_mods(config: dict) -> list[str]:
     """
     from bot.fabric import OPTIMIZATION_MODS as _DEFAULT_MODS  # import local pour éviter les cycles
 
-    return config.get("optimization_mods", _DEFAULT_MODS)
+    return cast(list[str], config.get("optimization_mods", _DEFAULT_MODS))
 
 
 def set_guild_default(guild_id: int, param: str, value: str, config: dict) -> None:

@@ -23,6 +23,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @tree.command(name="list", description="Liste tous les serveurs Minecraft disponibles")
     @require_guild
     async def list_command(interaction: discord.Interaction):
+        assert interaction.guild is not None
 
         servers = get_guild_servers(interaction.guild.id, load_config())
         if not servers:
@@ -43,6 +44,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
     async def ip_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
@@ -125,6 +127,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
     async def uptime_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
 
         server_config = get_server_config(interaction.guild.id, server, load_config())
         if not server_config:
@@ -144,6 +147,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
+        assert isinstance(instance_id, str)
         try:
             data = get_uptime_and_cost(instance_id, region, hourly_cost)
 

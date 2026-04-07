@@ -75,6 +75,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @require_guild
     @require_admin
     async def logs_command(interaction: discord.Interaction, server: str, number: int = 25):
+        assert interaction.guild is not None
 
         n_lines = max(1, min(number, MAX_LINES))
 
@@ -123,6 +124,6 @@ def setup(tree: app_commands.CommandTree) -> None:
         messages = _split_for_discord(header, output.strip() or "(vide)")
 
         await interaction.followup.send(messages[0])
-        if interaction.channel:
+        if isinstance(interaction.channel, discord.abc.Messageable):
             for page in messages[1:]:
                 await interaction.channel.send(page)

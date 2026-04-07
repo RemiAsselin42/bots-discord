@@ -19,7 +19,7 @@ MC_SERVER_HOST = os.getenv("MC_SERVER_HOST", "")
 MC_SERVER_INSTANCE_ID = os.getenv("MC_SERVER_INSTANCE_ID", "")
 MC_SERVER_REGION = os.getenv("MC_SERVER_REGION", "eu-north-1")
 
-_KEY_TYPES = [
+_KEY_TYPES: list[type[paramiko.PKey]] = [
     paramiko.RSAKey,
     paramiko.Ed25519Key,
     paramiko.ECDSAKey,

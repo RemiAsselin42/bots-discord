@@ -741,6 +741,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         icon_url: str | None = None,
         server_type: str = SERVER_TYPE_VANILLA,
     ):
+        assert interaction.guild is not None
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -891,6 +892,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @require_guild
     @require_admin
     async def removeserver_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -983,6 +985,8 @@ def setup(tree: app_commands.CommandTree) -> None:
         hourly_cost: float | None = None,
     ):
 
+        assert interaction.guild is not None
+
         if instance_id is not None and (not instance_id.startswith("i-") or len(instance_id) != 19):
             await interaction.response.send_message(
                 ":x: Format d'instance_id invalide. Exemple: `i-0123456789abcdef0`", ephemeral=True
@@ -1050,6 +1054,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     async def setpermission_command(
         interaction: discord.Interaction, command: str, role: discord.Role
     ):
+        assert interaction.guild is not None
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -1083,6 +1088,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @require_guild
     @require_admin
     async def resetpermission_command(interaction: discord.Interaction, command: str):
+        assert interaction.guild is not None
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -1106,6 +1112,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @require_guild
     @require_admin
     async def listpermissions_command(interaction: discord.Interaction):
+        assert interaction.guild is not None
 
         config = load_config()
         summary = get_full_permission_summary(interaction.guild.id, config)
@@ -1160,6 +1167,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @require_guild
     @require_admin
     async def setdefault_command(interaction: discord.Interaction, parameter: str, value: str):
+        assert interaction.guild is not None
 
         config = load_config()
         try:
@@ -1183,6 +1191,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @require_guild
     @require_admin
     async def showdefaults_command(interaction: discord.Interaction):
+        assert interaction.guild is not None
 
         config = load_config()
         defaults = get_guild_defaults(interaction.guild.id, config)
@@ -1269,6 +1278,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         add_whitelist: str | None = None,
         icon_url: str | None = None,
     ):
+        assert interaction.guild is not None
         guild_str = str(interaction.guild.id)
         config = load_config()
 
@@ -1366,6 +1376,7 @@ def setup(tree: app_commands.CommandTree) -> None:
     @require_guild
     @require_admin
     async def setchannel_command(interaction: discord.Interaction, channel: discord.TextChannel):
+        assert interaction.guild is not None
 
         guild_str = str(interaction.guild.id)
         config = load_config()

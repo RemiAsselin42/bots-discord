@@ -82,4 +82,4 @@ async def get_modrinth_mod_url(mod_slug: str, mc_version: str) -> str:
     if not primary:
         raise ValueError(f"Aucun fichier trouvé pour le mod '{mod_slug}' (MC {mc_version})")
 
-    return primary["url"]
+    return str(primary["url"])
