@@ -28,7 +28,7 @@ Chaque bot dispose de son propre `docker-compose.yml` et `Dockerfile`. Ils sont 
 
 ```bash
 # 1. Cloner le dépôt
-git clone <url-du-repo>
+git clone https://github.com/RemiAsselin42/bots-discord.git
 cd bots-discord
 
 # 2. Configurer chaque bot
@@ -53,6 +53,12 @@ Le script `update.sh` met à jour le code depuis Git et reconstruit les deux con
 
 ```bash
 ./update.sh
+```
+
+Pour rendre le script exécutable si nécessaire :
+
+```bash
+chmod +x update.sh 
 ```
 
 Ce script :
