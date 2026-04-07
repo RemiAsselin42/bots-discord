@@ -7,6 +7,7 @@ Stratégie :
 - Les phases SSH et RCON (bot.ssh.*) sont mockées via patch + MagicMock/AsyncMock.
 - Le bot Discord est un MagicMock dont get_channel() retourne un canal fictif.
 """
+import asyncio
 import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -62,9 +63,9 @@ async def test_notify_sends_when_running():
         patch("bot.tasks.get_ec2_client", return_value=ec2),
         patch("bot.tasks.asyncio.sleep", new=AsyncMock()),
         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
-        # update_duckdns est importé localement depuis bot.ssh dans notify_server_ready
-        patch("bot.ssh.update_duckdns", new=AsyncMock(return_value=True)),
-        patch("bot.minecraft_process.MC_SERVER_KEY_PATH", "/fake/key.pem"),
+        # update_duckdns est maintenant importé en tête de bot.tasks
+        patch("bot.tasks.update_duckdns", new=AsyncMock(return_value=True)),
+        patch("bot.tasks.MC_SERVER_KEY_PATH", "/fake/key.pem"),
     ):
         await notify_server_ready(
             bot=bot,
@@ -163,9 +164,9 @@ async def test_notify_rcon_timeout_after_mc_started():
         patch("bot.tasks.get_ec2_client", return_value=ec2),
         patch("bot.tasks.asyncio.sleep", new=AsyncMock()),
         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
-        # update_duckdns est importé localement depuis bot.ssh dans notify_server_ready
-        patch("bot.ssh.update_duckdns", new=AsyncMock(return_value=True)),
-        patch("bot.minecraft_process.MC_SERVER_KEY_PATH", "/fake/key.pem"),
+        # update_duckdns est maintenant importé en tête de bot.tasks
+        patch("bot.tasks.update_duckdns", new=AsyncMock(return_value=True)),
+        patch("bot.tasks.MC_SERVER_KEY_PATH", "/fake/key.pem"),
     ):
         await notify_server_ready(
             bot=bot,
@@ -366,3 +367,136 @@ async def test_idle_check_skipped_on_invalid_instance_id():
         )
 
     ec2.describe_instance_status.assert_not_called()
+
+
+# ── Logique zombie (MC injoignable) ──────────────────────────────────────────
+
+async def test_zombie_ssh_unreachable_instance_preserved():
+    """Branche zombie 1 : SSH injoignable → is_minecraft_process_running retourne (False, False)
+    → instance conservée (on ne sait pas si Java tourne)."""
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+
+    mc_server = MagicMock()
+    mc_server.async_status = AsyncMock(side_effect=Exception("Connection refused"))
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        # SSH injoignable : ssh_ok=False
+        return (False, False)
+
+    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
+         patch("bot.tasks.JavaServer") as mock_java, \
+         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread):
+        mock_java.lookup.return_value = mc_server
+        await _check_and_stop_if_idle(
+            bot=bot,
+            guild_str="123",
+            server_key="survival",
+            server_config=_server_config(),
+            notification_channel_id=None,
+        )
+
+    ec2.stop_instances.assert_not_called()
+
+
+async def test_zombie_java_running_instance_preserved():
+    """Branche zombie 2 : SSH ok mais Java toujours en cours d'exécution
+    → serveur en démarrage, instance conservée sans arrêt."""
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+
+    mc_server = MagicMock()
+    mc_server.async_status = AsyncMock(side_effect=asyncio.TimeoutError())
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        # SSH ok, Java tourne encore
+        return (True, True)
+
+    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
+         patch("bot.tasks.JavaServer") as mock_java, \
+         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread):
+        mock_java.lookup.return_value = mc_server
+        await _check_and_stop_if_idle(
+            bot=bot,
+            guild_str="123",
+            server_key="survival",
+            server_config=_server_config(),
+            notification_channel_id=None,
+        )
+
+    ec2.stop_instances.assert_not_called()
+
+
+async def test_zombie_other_servers_active_instance_preserved():
+    """Branche zombie 3 : SSH ok, Java arrêté, mais d'autres serveurs MC tournent
+    → instance conservée."""
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+
+    mc_server = MagicMock()
+    mc_server.async_status = AsyncMock(side_effect=Exception("Connection refused"))
+
+    call_index = 0
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        nonlocal call_index
+        call_index += 1
+        if call_index == 1:
+            # is_minecraft_process_running : SSH ok, Java arrêté
+            return (True, False)
+        # check_other_mc_servers_running : check réussi, autres serveurs actifs
+        return (True, ["creative"])
+
+    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
+         patch("bot.tasks.JavaServer") as mock_java, \
+         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread):
+        mock_java.lookup.return_value = mc_server
+        await _check_and_stop_if_idle(
+            bot=bot,
+            guild_str="123",
+            server_key="survival",
+            server_config=_server_config(),
+            notification_channel_id=None,
+        )
+
+    ec2.stop_instances.assert_not_called()
+
+
+async def test_zombie_no_other_servers_instance_stopped():
+    """Branche zombie 4 (nominale) : SSH ok, Java arrêté, aucun autre serveur actif
+    → instance EC2 arrêtée et notification envoyée."""
+    send = AsyncMock()
+    bot = _make_bot(send)
+    ec2 = _ec2_state("running")
+
+    mc_server = MagicMock()
+    mc_server.async_status = AsyncMock(side_effect=Exception("Connection refused"))
+
+    call_index = 0
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        nonlocal call_index
+        call_index += 1
+        if call_index == 1:
+            # is_minecraft_process_running : SSH ok, Java arrêté
+            return (True, False)
+        # check_other_mc_servers_running : check réussi, aucun autre serveur
+        return (True, [])
+
+    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
+         patch("bot.tasks.JavaServer") as mock_java, \
+         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread):
+        mock_java.lookup.return_value = mc_server
+        await _check_and_stop_if_idle(
+            bot=bot,
+            guild_str="123",
+            server_key="survival",
+            server_config=_server_config(),
+            notification_channel_id=99,
+        )
+
+    ec2.stop_instances.assert_called_once_with(InstanceIds=["i-0123456789abcdef0"])
+    send.assert_awaited_once()
+    msg = send.call_args[0][0]
+    assert "zombie" in msg.lower()
+    assert "Auto-stop" in msg
