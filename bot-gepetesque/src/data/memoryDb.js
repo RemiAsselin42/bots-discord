@@ -3,10 +3,10 @@ const { queryAll, queryOne, run, save, normalizeFactText } = require("./dbCore")
 // ─── Mémoire long terme par utilisateur ──────────────────────────────────────
 
 function getUserMemory(userId, guildId) {
-    const row = queryOne(
-        "SELECT content FROM user_memory WHERE user_id = ? AND guild_id = ?",
-        [userId, guildId ?? ""]
-    );
+    const row = queryOne("SELECT content FROM user_memory WHERE user_id = ? AND guild_id = ?", [
+        userId,
+        guildId ?? "",
+    ]);
     return row ? row.content : null;
 }
 
@@ -22,7 +22,13 @@ function setUserMemory(userId, guildId, content) {
 }
 
 function clearUserMemory(userId, guildId) {
-    if (!queryOne("SELECT 1 FROM user_memory WHERE user_id = ? AND guild_id = ?", [userId, guildId ?? ""])) return false;
+    if (
+        !queryOne("SELECT 1 FROM user_memory WHERE user_id = ? AND guild_id = ?", [
+            userId,
+            guildId ?? "",
+        ])
+    )
+        return false;
     run("DELETE FROM user_memory WHERE user_id = ? AND guild_id = ?", [userId, guildId ?? ""]);
     save();
     return true;
@@ -51,9 +57,13 @@ function getUserForgetCutoff(userId, guildId) {
 }
 
 function getUserForgetCutoffMap(userIds, guildId) {
-    const ids = [...new Set((Array.isArray(userIds) ? userIds : [])
-        .map((id) => String(id || "").trim())
-        .filter(Boolean))];
+    const ids = [
+        ...new Set(
+            (Array.isArray(userIds) ? userIds : [])
+                .map((id) => String(id || "").trim())
+                .filter(Boolean)
+        ),
+    ];
     if (ids.length === 0) return {};
 
     const placeholders = ids.map(() => "?").join(", ");
@@ -89,10 +99,7 @@ function removeUserMemoryByKeyword(userId, guildId, keyword) {
     if (filtered.length === lines.length) return false;
 
     if (filtered.length === 0) {
-        run("DELETE FROM user_memory WHERE user_id = ? AND guild_id = ?", [
-            userId,
-            guildId ?? "",
-        ]);
+        run("DELETE FROM user_memory WHERE user_id = ? AND guild_id = ?", [userId, guildId ?? ""]);
     } else {
         run(
             `UPDATE user_memory

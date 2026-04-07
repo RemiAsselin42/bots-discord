@@ -83,10 +83,10 @@ test("indexTopicsWithAI ignore les topics avec clé vide ou trop longue", async 
     _axiosPostImpl = async () =>
         makeDeepSeekResponse(
             '{"topics": [' +
-            '{"key": "", "value": "oublie-moi"},' +
-            '{"key": "cette-cle-est-vraiment-beaucoup-trop-longue-pour-etre-valide", "value": "valeur"},' +
-            '{"key": "surnom", "value": "Toto"}' +
-            "]}"
+                '{"key": "", "value": "oublie-moi"},' +
+                '{"key": "cette-cle-est-vraiment-beaucoup-trop-longue-pour-etre-valide", "value": "valeur"},' +
+                '{"key": "surnom", "value": "Toto"}' +
+                "]}"
         );
 
     await indexTopicsWithAI(userId, guildId, "Mon surnom c'est Toto", "Ok !");
@@ -106,12 +106,9 @@ test("indexTopicsWithAI ne crashe pas sur une réponse IA non-JSON", async () =>
     const userId = uid("u");
     const guildId = uid("g");
 
-    _axiosPostImpl = async () =>
-        makeDeepSeekResponse("Je n'ai rien à indexer.");
+    _axiosPostImpl = async () => makeDeepSeekResponse("Je n'ai rien à indexer.");
 
-    await assert.doesNotReject(() =>
-        indexTopicsWithAI(userId, guildId, "Bonjour", "Salut !")
-    );
+    await assert.doesNotReject(() => indexTopicsWithAI(userId, guildId, "Bonjour", "Salut !"));
 });
 
 test("indexTopicsWithAI ne crashe pas si l'appel API échoue", async () => {
@@ -122,18 +119,14 @@ test("indexTopicsWithAI ne crashe pas si l'appel API échoue", async () => {
         throw new Error("Network error");
     };
 
-    await assert.doesNotReject(() =>
-        indexTopicsWithAI(userId, guildId, "Bonjour", "Salut !")
-    );
+    await assert.doesNotReject(() => indexTopicsWithAI(userId, guildId, "Bonjour", "Salut !"));
 });
 
 // ─── resolveTopicsWithAI ──────────────────────────────────────────────────────
 
 test("resolveTopicsWithAI retourne les clés valides et filtre les hallucinations", async () => {
     _axiosPostImpl = async () =>
-        makeDeepSeekResponse(
-            '{"delete": ["prénom", "surnom", "cle-inventee-par-ia"]}'
-        );
+        makeDeepSeekResponse('{"delete": ["prénom", "surnom", "cle-inventee-par-ia"]}');
 
     const indexedKeys = ["prénom", "surnom", "ville"];
     const result = await resolveTopicsWithAI(indexedKeys, "mon identité");
@@ -153,8 +146,7 @@ test("resolveTopicsWithAI retourne [] si topic vide", async () => {
 });
 
 test("resolveTopicsWithAI retourne [] si l'IA répond sans JSON valide", async () => {
-    _axiosPostImpl = async () =>
-        makeDeepSeekResponse("Aucune correspondance trouvée.");
+    _axiosPostImpl = async () => makeDeepSeekResponse("Aucune correspondance trouvée.");
 
     const result = await resolveTopicsWithAI(["prénom", "ville"], "identité");
     assert.deepEqual(result, []);

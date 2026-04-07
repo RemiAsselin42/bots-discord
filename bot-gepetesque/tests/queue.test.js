@@ -17,39 +17,38 @@ let _callDeepSeekImpl = async () => ({
     data: { choices: [{ message: { content: "Réponse IA de test" } }] },
 });
 let _maybeSummarizeImpl = async () => {};
-let _indexTopicsImpl   = async () => {};
+let _indexTopicsImpl = async () => {};
 
 // db stub : enregistre les appels pour introspection
 const _dbCalls = [];
 const _dbMock = {
-    addMessage:                      (...a) => _dbCalls.push({ fn: "addMessage", args: a }),
-    getChannelHistory:               ()     => [],
-    getUserMemory:                   ()     => null,
-    getUserFacts:                    ()     => [],
-    getChannelSummary:               ()     => null,
-    getUserForgetCutoff:             ()     => null,
-    getUserForgetCutoffMap:          ()     => ({}),
-    clearUserMemory:                 ()     => {},
-    clearUserFacts:                  ()     => {},
-    setUserForgetCutoff:             ()     => {},
-    clearChannelSummary:             ()     => {},
-    setUserMemory:                   ()     => {},
-    deleteUserFactsByTopic:          ()     => [],
-    removeUserMemoryByKeyword:       ()     => false,
-    removeChannelMessagesByKeywords: ()     => 0,
+    addMessage: (...a) => _dbCalls.push({ fn: "addMessage", args: a }),
+    getChannelHistory: () => [],
+    getUserMemory: () => null,
+    getUserFacts: () => [],
+    getChannelSummary: () => null,
+    getUserForgetCutoff: () => null,
+    getUserForgetCutoffMap: () => ({}),
+    clearUserMemory: () => {},
+    clearUserFacts: () => {},
+    setUserForgetCutoff: () => {},
+    clearChannelSummary: () => {},
+    setUserMemory: () => {},
+    deleteUserFactsByTopic: () => [],
+    removeUserMemoryByKeyword: () => false,
+    removeChannelMessagesByKeywords: () => 0,
 };
 
 Module._load = function (request, _parent, _isMain) {
     if (request === "../services/ai")
         return {
-            callDeepSeek:      (...a) => _callDeepSeekImpl(...a),
-            maybeSummarize:    (...a) => _maybeSummarizeImpl(...a),
+            callDeepSeek: (...a) => _callDeepSeekImpl(...a),
+            maybeSummarize: (...a) => _maybeSummarizeImpl(...a),
             indexTopicsWithAI: (...a) => _indexTopicsImpl(...a),
         };
     if (request === "../services/webFetch")
         return { fetchWebPage: async () => ({ title: "", content: "", url: "" }) };
-    if (request === "../data/db")
-        return _dbMock;
+    if (request === "../data/db") return _dbMock;
     return originalLoad.apply(this, arguments);
 };
 
@@ -60,7 +59,13 @@ const { enqueue, handleMessageUpdate, handleMessageDelete } = require("../src/bo
 const BOT_USER = { id: "bot-999", username: "TestBot" };
 let _msgCounter = 0;
 
-function makeMessage({ id, content = "bonjour", userId = "user-1", mentionsBot = true, reply } = {}) {
+function makeMessage({
+    id,
+    content = "bonjour",
+    userId = "user-1",
+    mentionsBot = true,
+    reply,
+} = {}) {
     const _id = id ?? `msg-${++_msgCounter}`;
     const msg = {
         id: _id,
@@ -96,7 +101,10 @@ test("Message sans mention bot : addMessage appelé, callDeepSeek non appelé", 
     const msg = makeMessage({ userId: "user-no-mention", mentionsBot: false });
     await enqueue(msg);
 
-    assert.ok(_dbCalls.some((c) => c.fn === "addMessage"), "addMessage doit être appelé");
+    assert.ok(
+        _dbCalls.some((c) => c.fn === "addMessage"),
+        "addMessage doit être appelé"
+    );
     assert.equal(deepSeekCalled, false, "callDeepSeek ne doit pas être appelé");
 });
 
@@ -124,7 +132,7 @@ test("handleMessageUpdate remplace un message en attente dans la queue", async (
 
     // msg1 démarre le traitement (suspendu au premier await dans processMessage)
     const done = enqueue(msg1);
-    enqueue(msg2);               // s'ajoute à la queue pendant le traitement de msg1
+    enqueue(msg2); // s'ajoute à la queue pendant le traitement de msg1
     handleMessageUpdate(msg2, msg2Updated); // remplace msg2 dans la queue
 
     await done;
@@ -134,10 +142,7 @@ test("handleMessageUpdate remplace un message en attente dans la queue", async (
         contents.includes("Message 2 mis à jour"),
         `Le message mis à jour doit être enregistré ; contenus: ${JSON.stringify(contents)}`
     );
-    assert.ok(
-        !contents.includes("Message 2 original"),
-        "L'original ne doit pas être enregistré"
-    );
+    assert.ok(!contents.includes("Message 2 original"), "L'original ne doit pas être enregistré");
 });
 
 test("handleMessageDelete retire un message en attente dans la queue", async () => {

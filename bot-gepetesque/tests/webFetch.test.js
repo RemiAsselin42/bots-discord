@@ -25,7 +25,7 @@ const _dnsMock = { lookup: (...args) => _dnsLookupImpl(...args) };
 
 Module._load = function (request, _parent, _isMain) {
     if (request === "axios") return _axiosMock;
-    if (request === "dns")   return { promises: _dnsMock };
+    if (request === "dns") return { promises: _dnsMock };
     return originalLoad.apply(this, arguments);
 };
 
@@ -45,10 +45,7 @@ function makeAxiosResponse(data, contentType = "text/html", status = 200) {
 // ─── SSRF ────────────────────────────────────────────────────────────────────
 
 test("SSRF : localhost est bloqué avant toute requête réseau", async () => {
-    await assert.rejects(
-        fetchWebPage("http://localhost/"),
-        /Accès aux adresses internes refusé/
-    );
+    await assert.rejects(fetchWebPage("http://localhost/"), /Accès aux adresses internes refusé/);
 });
 
 test("SSRF : IP privée littérale (192.168.x.x) est bloquée", async () => {
@@ -70,20 +67,21 @@ test("SSRF : domaine dont le DNS résout vers une IP privée est bloqué", async
 
 test("HTML : titre extrait et balises supprimées", async () => {
     _dnsLookupImpl = async () => [{ address: "93.184.216.34", family: 4 }];
-    _axiosGetImpl  = async () => makeAxiosResponse(
-        "<html><head><title>Ma Page</title></head><body><script>evil()</script><p>Bonjour monde</p></body></html>"
-    );
+    _axiosGetImpl = async () =>
+        makeAxiosResponse(
+            "<html><head><title>Ma Page</title></head><body><script>evil()</script><p>Bonjour monde</p></body></html>"
+        );
 
     const result = await fetchWebPage("https://example.com/");
     assert.equal(result.title, "Ma Page");
     assert.ok(result.content.includes("Bonjour monde"), `contenu: ${result.content}`);
-    assert.ok(!result.content.includes("<p>"),     "Les balises HTML doivent être supprimées");
-    assert.ok(!result.content.includes("evil()"),  "Le contenu <script> doit être supprimé");
+    assert.ok(!result.content.includes("<p>"), "Les balises HTML doivent être supprimées");
+    assert.ok(!result.content.includes("evil()"), "Le contenu <script> doit être supprimé");
 });
 
 test("JSON / texte brut : contenu retourné sans transformation HTML", async () => {
     _dnsLookupImpl = async () => [{ address: "93.184.216.34", family: 4 }];
-    _axiosGetImpl  = async () => makeAxiosResponse('{"clé":"valeur"}', "application/json");
+    _axiosGetImpl = async () => makeAxiosResponse('{"clé":"valeur"}', "application/json");
 
     const result = await fetchWebPage("https://api.example.com/data");
     assert.ok(result.content.includes('"clé"'), `contenu: ${result.content}`);
@@ -93,7 +91,7 @@ test("JSON / texte brut : contenu retourné sans transformation HTML", async () 
 
 test("Type MIME non supporté (image/png) → rejet explicite", async () => {
     _dnsLookupImpl = async () => [{ address: "93.184.216.34", family: 4 }];
-    _axiosGetImpl  = async () => makeAxiosResponse(Buffer.alloc(10), "image/png");
+    _axiosGetImpl = async () => makeAxiosResponse(Buffer.alloc(10), "image/png");
 
     await assert.rejects(
         fetchWebPage("https://example.com/img.png"),
@@ -105,7 +103,7 @@ test("Type MIME non supporté (image/png) → rejet explicite", async () => {
 
 test("Contenu dépassant maxChars est tronqué avec indicateur", async () => {
     _dnsLookupImpl = async () => [{ address: "93.184.216.34", family: 4 }];
-    _axiosGetImpl  = async () => makeAxiosResponse(`<p>${"A".repeat(500)}</p>`);
+    _axiosGetImpl = async () => makeAxiosResponse(`<p>${"A".repeat(500)}</p>`);
 
     const result = await fetchWebPage("https://example.com/long", { maxChars: 100 });
     assert.ok(result.content.endsWith("[… contenu tronqué]"), `fin: ${result.content.slice(-30)}`);

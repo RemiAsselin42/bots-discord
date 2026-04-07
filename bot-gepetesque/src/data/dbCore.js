@@ -115,10 +115,7 @@ function run(sql, params = []) {
 // ─── Helpers de normalisation ─────────────────────────────────────────────────
 
 function escapeLikePattern(value) {
-    return value
-        .replace(/\\/g, "\\\\")
-        .replace(/%/g, "\\%")
-        .replace(/_/g, "\\_");
+    return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 function normalizeFactText(value) {

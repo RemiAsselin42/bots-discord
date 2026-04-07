@@ -3,7 +3,11 @@ const { queryAll, queryOne, run, save, normalizeFactText, escapeLikePattern } = 
 // ─── Index de faits utilisateur ──────────────────────────────────────────────
 
 function upsertUserFact(userId, guildId, factKey, factValue) {
-    const key = String(factKey || "").trim().toLowerCase().replace(/_/g, " ").replace(/\s+/g, " ");
+    const key = String(factKey || "")
+        .trim()
+        .toLowerCase()
+        .replace(/_/g, " ")
+        .replace(/\s+/g, " ");
     const value = String(factValue || "").trim();
     if (!key || !value) return false;
 
@@ -78,10 +82,10 @@ function deleteUserFactByKey(userId, guildId, factKey) {
 }
 
 function clearUserFacts(userId, guildId) {
-    const exists = queryOne(
-        "SELECT 1 FROM user_fact_index WHERE user_id = ? AND guild_id = ?",
-        [userId, guildId ?? ""]
-    );
+    const exists = queryOne("SELECT 1 FROM user_fact_index WHERE user_id = ? AND guild_id = ?", [
+        userId,
+        guildId ?? "",
+    ]);
     if (!exists) return false;
     run("DELETE FROM user_fact_index WHERE user_id = ? AND guild_id = ?", [userId, guildId ?? ""]);
     save();
@@ -98,12 +102,7 @@ function deleteUserFactsByTopic(userId, guildId, topic) {
          WHERE user_id = ?
            AND guild_id = ?
            AND (norm_key LIKE ? ESCAPE '\\' OR norm_value LIKE ? ESCAPE '\\')`,
-        [
-            userId,
-            guildId ?? "",
-            `%${escapeLikePattern(needle)}%`,
-            `%${escapeLikePattern(needle)}%`,
-        ]
+        [userId, guildId ?? "", `%${escapeLikePattern(needle)}%`, `%${escapeLikePattern(needle)}%`]
     ).map((row) => ({
         id: Number(row.id),
         key: row.fact_key,
@@ -117,12 +116,7 @@ function deleteUserFactsByTopic(userId, guildId, topic) {
          WHERE user_id = ?
            AND guild_id = ?
            AND (norm_key LIKE ? ESCAPE '\\' OR norm_value LIKE ? ESCAPE '\\')`,
-        [
-            userId,
-            guildId ?? "",
-            `%${escapeLikePattern(needle)}%`,
-            `%${escapeLikePattern(needle)}%`,
-        ]
+        [userId, guildId ?? "", `%${escapeLikePattern(needle)}%`, `%${escapeLikePattern(needle)}%`]
     );
 
     save();

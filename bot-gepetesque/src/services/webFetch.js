@@ -17,7 +17,7 @@ const PRIVATE_IP_PATTERNS = [
     /^169\.254\./, // link-local
     /^::1$/,
     /^fc[0-9a-f]{2}:/i, // IPv6 ULA
-    /^fe80:/i,          // IPv6 link-local
+    /^fe80:/i, // IPv6 link-local
 ];
 
 function isPrivateAddress(hostname) {
@@ -167,15 +167,10 @@ async function fetchWebPage(url, { timeoutMs = 10000, maxChars = 4000 } = {}) {
 
     if (contentType.includes("text/html")) {
         text = extractTextFromHtml(response.data);
-    } else if (
-        contentType.includes("text/") ||
-        contentType.includes("application/json")
-    ) {
+    } else if (contentType.includes("text/") || contentType.includes("application/json")) {
         text = String(response.data);
     } else {
-        throw new Error(
-            `Type de contenu non supporté : ${contentType.split(";")[0].trim()}`
-        );
+        throw new Error(`Type de contenu non supporté : ${contentType.split(";")[0].trim()}`);
     }
 
     if (text.length > maxChars) {

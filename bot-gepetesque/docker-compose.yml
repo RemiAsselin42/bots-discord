@@ -1,8 +1,8 @@
 services:
-  gepetesque:
-    build: .
-    container_name: gepetesque
-    restart: always
-    env_file: .env
-    volumes:
-      - ./bot.db:/app/src/data/bot.db
+    gepetesque:
+        build: .
+        container_name: gepetesque
+        restart: always
+        env_file: .env
+        volumes:
+            - ./bot.db:/app/src/data/bot.db

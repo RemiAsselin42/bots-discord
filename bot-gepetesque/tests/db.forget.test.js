@@ -25,11 +25,7 @@ test("removeUserMemoryByKeyword normalise les accents", () => {
     const userId = uid("u");
     const guildId = uid("g");
 
-    db.setUserMemory(
-        userId,
-        guildId,
-        "Mon fruit prefere est peche\nMon surnom est Pepito"
-    );
+    db.setUserMemory(userId, guildId, "Mon fruit prefere est peche\nMon surnom est Pepito");
 
     const removed = db.removeUserMemoryByKeyword(userId, guildId, "pêche");
     const memory = db.getUserMemory(userId, guildId);

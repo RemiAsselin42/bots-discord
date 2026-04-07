@@ -17,7 +17,7 @@ const COMMAND_DEFINITIONS = [
         options: [
             {
                 name: "topic",
-                description: "Sujet a oublier (ex: \"mon surnom\", \"mon âge\", etc.)",
+                description: 'Sujet a oublier (ex: "mon surnom", "mon âge", etc.)',
                 type: 3,
                 required: true,
                 autocomplete: true,
@@ -103,12 +103,16 @@ async function handleInteraction(interaction) {
     if (interaction.commandName === "add-channel") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (!hasAdminPermission(interaction)) {
-            await interaction.editReply(":x: Vous devez être administrateur pour utiliser cette commande !");
+            await interaction.editReply(
+                ":x: Vous devez être administrateur pour utiliser cette commande !"
+            );
             return;
         }
         const added = db.addAllowedChannel(interaction.channelId, interaction.guildId);
         await interaction.editReply(
-            added ? ":white_check_mark: Je peux maintenant répondre dans ce salon !" : "Ce salon est déjà autorisé ;)"
+            added
+                ? ":white_check_mark: Je peux maintenant répondre dans ce salon !"
+                : "Ce salon est déjà autorisé ;)"
         );
     }
 
@@ -116,7 +120,9 @@ async function handleInteraction(interaction) {
     if (interaction.commandName === "remove-channel") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (!hasAdminPermission(interaction)) {
-            await interaction.editReply(":x: Vous devez être administrateur pour utiliser cette commande !");
+            await interaction.editReply(
+                ":x: Vous devez être administrateur pour utiliser cette commande !"
+            );
             return;
         }
         const removed = db.removeAllowedChannel(interaction.channelId);
@@ -131,7 +137,9 @@ async function handleInteraction(interaction) {
     if (interaction.commandName === "list-channels") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (!hasAdminPermission(interaction)) {
-            await interaction.editReply(":x: Vous devez être administrateur pour utiliser cette commande !");
+            await interaction.editReply(
+                ":x: Vous devez être administrateur pour utiliser cette commande !"
+            );
             return;
         }
         const channels = db.getAllowedChannels(interaction.guildId);
@@ -146,14 +154,18 @@ async function handleInteraction(interaction) {
     if (interaction.commandName === "reset-history") {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (!hasAdminPermission(interaction)) {
-            await interaction.editReply(":x: Vous devez être administrateur pour utiliser cette commande !");
+            await interaction.editReply(
+                ":x: Vous devez être administrateur pour utiliser cette commande !"
+            );
             return;
         }
         console.log("Commande /reset-history reçue");
         db.clearChannelHistory(interaction.channelId);
         db.clearChannelSummary(interaction.channelId);
         db.clearGuildMemories(interaction.guildId);
-        await interaction.editReply("🗑️ Historique et mémoires de tous les utilisateurs réinitialisés avec succès !");
+        await interaction.editReply(
+            "🗑️ Historique et mémoires de tous les utilisateurs réinitialisés avec succès !"
+        );
     }
 
     // /forget
@@ -188,7 +200,10 @@ async function handleInteraction(interaction) {
             const allFacts = db.getUserFacts(userId, guildId);
             if (allFacts.length > 0) {
                 const indexedKeys = allFacts.map((f) => f.key);
-                const resolvedKeys = await resolveTopicsWithAI(indexedKeys, normalizedTopic || topic);
+                const resolvedKeys = await resolveTopicsWithAI(
+                    indexedKeys,
+                    normalizedTopic || topic
+                );
                 for (const key of resolvedKeys) {
                     const deleted = db.deleteUserFactByKey(userId, guildId, key);
                     if (deleted) deletedFacts.push(deleted);
@@ -197,7 +212,8 @@ async function handleInteraction(interaction) {
         }
 
         if (deletedFacts.length === 0) {
-            const suggestions = db.searchUserFacts(userId, guildId, normalizedTopic || topic)
+            const suggestions = db
+                .searchUserFacts(userId, guildId, normalizedTopic || topic)
                 .slice(0, 5)
                 .map((fact) => `• ${fact.key} : ${fact.value}`)
                 .join("\n");
@@ -233,7 +249,9 @@ async function handleInteraction(interaction) {
         const freeMemory = db.getUserMemory(userId, guildId);
 
         if (facts.length === 0 && !freeMemory) {
-            await interaction.editReply("ℹ️ Aucune information personnelle indexée pour le moment.");
+            await interaction.editReply(
+                "ℹ️ Aucune information personnelle indexée pour le moment."
+            );
             return;
         }
 
@@ -243,9 +261,8 @@ async function handleInteraction(interaction) {
             parts.push(`🧠 Voici ce que je sais sur toi :\n${lines.join("\n")}`);
         }
         if (freeMemory) {
-            const truncated = freeMemory.length > 800
-                ? freeMemory.slice(0, 800) + "\n…(tronqué)"
-                : freeMemory;
+            const truncated =
+                freeMemory.length > 800 ? freeMemory.slice(0, 800) + "\n…(tronqué)" : freeMemory;
             parts.push(`📝 Notes libres :\n${truncated}`);
         }
 

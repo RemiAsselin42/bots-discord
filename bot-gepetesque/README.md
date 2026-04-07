@@ -36,12 +36,12 @@ Mentionner le bot dans un salon autorisé :
 
 | Commande          | Permission | Description                                                                                                     |
 | ----------------- | ---------- | --------------------------------------------------------------------------------------------------------------- |
-| `/forget`         | Tous       | Oublie un fait indexé précis (autocomplétion + résolution sémantique IA), nettoie les messages liés            |
+| `/forget`         | Tous       | Oublie un fait indexé précis (autocomplétion + résolution sémantique IA), nettoie les messages liés             |
 | `/memory-list`    | Tous       | Affiche les faits indexés et les notes libres mémorisées                                                        |
 | `/forget-all`     | Tous       | Efface toute ta mémoire et tes faits indexés, pose un cutoff (contexte antérieur ignoré), purge le résumé salon |
-| `/add-channel`    | Admin      | Autorise le salon actuel                                                                                         |
-| `/remove-channel` | Admin      | Retire le salon actuel                                                                                           |
-| `/list-channels`  | Admin      | Liste les salons autorisés                                                                                       |
+| `/add-channel`    | Admin      | Autorise le salon actuel                                                                                        |
+| `/remove-channel` | Admin      | Retire le salon actuel                                                                                          |
+| `/list-channels`  | Admin      | Liste les salons autorisés                                                                                      |
 | `/reset-history`  | Admin      | Efface l'historique, le résumé et les mémoires de tous les membres du serveur                                   |
 
 ## Installation

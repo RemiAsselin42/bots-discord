@@ -52,7 +52,9 @@ async function maybeSummarize(channelId) {
         if (summary) {
             db.setChannelSummary(channelId, summary);
             db.pruneOldMessages(channelId, db.HISTORY_LIMIT);
-            console.log(`Résumé généré pour le salon ${channelId} (${toSummarize.length} messages compressés)`);
+            console.log(
+                `Résumé généré pour le salon ${channelId} (${toSummarize.length} messages compressés)`
+            );
         }
     } catch (err) {
         console.error("Erreur génération résumé:", err.message);
@@ -85,10 +87,10 @@ async function indexTopicsWithAI(userId, guildId, userMessage, botReply) {
                         "préférences de style envers le bot (ton souhaité, humour, sérieux, etc.). " +
                         'Réponds UNIQUEMENT avec un JSON valide : {"topics": [{"key": "prénom", "value": "Thomas"}, {"key": "passion", "value": "F1"}, {"key": "frère", "value": "Bastien"}, {"key": "style bot", "value": "blagueur"}]}. ' +
                         "Règles :\n" +
-                        "- Clés : minuscules, mots séparés par des espaces, JAMAIS d'underscore (\"date naissance\" pas \"date_naissance\")\n" +
-                        "- Clés courtes et sans article (\"prénom\" pas \"le prénom de\")\n" +
-                        "- Valeurs : données brutes, 1 à 4 mots max, PAS de phrases (\"lavande\" pas \"odeur de la lavande\", \"Bastien\" pas \"a un frère nommé Bastien\")\n" +
-                        "- Relations familiales : utiliser le lien comme clé et le prénom comme valeur (\"frère\": \"Bastien\")\n" +
+                        '- Clés : minuscules, mots séparés par des espaces, JAMAIS d\'underscore ("date naissance" pas "date_naissance")\n' +
+                        '- Clés courtes et sans article ("prénom" pas "le prénom de")\n' +
+                        '- Valeurs : données brutes, 1 à 4 mots max, PAS de phrases ("lavande" pas "odeur de la lavande", "Bastien" pas "a un frère nommé Bastien")\n' +
+                        '- Relations familiales : utiliser le lien comme clé et le prénom comme valeur ("frère": "Bastien")\n' +
                         "- Un fait = une entrée distincte\n" +
                         "- N'invente rien, n'infère que ce qui est dit explicitement par l'utilisateur\n" +
                         "- key ≤ 30 chars, value ≤ 60 chars\n" +
@@ -134,7 +136,7 @@ async function resolveTopicsWithAI(indexedKeys, requestedTopic) {
                         "Tu es un assistant de correspondance thématique. " +
                         "On te donne une liste de topics indexés et un sujet à oublier. " +
                         'Retourne les clés à supprimer en JSON : {"delete": ["key1", "key2"]}. ' +
-                        "Ne retourne que les clés de la liste fournie. Si aucun match : {\"delete\": []}",
+                        'Ne retourne que les clés de la liste fournie. Si aucun match : {"delete": []}',
                 },
                 {
                     role: "user",

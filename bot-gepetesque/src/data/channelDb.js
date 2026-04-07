@@ -8,7 +8,10 @@ function isAllowedChannel(channelId) {
 
 function addAllowedChannel(channelId, guildId) {
     if (queryOne("SELECT 1 FROM allowed_channels WHERE channel_id = ?", [channelId])) return false;
-    run("INSERT INTO allowed_channels (channel_id, guild_id) VALUES (?, ?)", [channelId, guildId ?? null]);
+    run("INSERT INTO allowed_channels (channel_id, guild_id) VALUES (?, ?)", [
+        channelId,
+        guildId ?? null,
+    ]);
     save();
     return true;
 }
@@ -22,10 +25,9 @@ function removeAllowedChannel(channelId) {
 
 function getAllowedChannels(guildId) {
     if (guildId) {
-        return queryAll(
-            "SELECT channel_id FROM allowed_channels WHERE guild_id = ?",
-            [guildId]
-        ).map((r) => r.channel_id);
+        return queryAll("SELECT channel_id FROM allowed_channels WHERE guild_id = ?", [
+            guildId,
+        ]).map((r) => r.channel_id);
     }
     return queryAll("SELECT channel_id FROM allowed_channels").map((r) => r.channel_id);
 }
@@ -41,19 +43,18 @@ function getChannelHistory(channelId) {
 }
 
 function addMessage(channelId, username, content, userId = null) {
-    run("INSERT INTO message_history (channel_id, user_id, username, content) VALUES (?, ?, ?, ?)", [
-        channelId, userId,
-        username, content,
-    ]);
+    run(
+        "INSERT INTO message_history (channel_id, user_id, username, content) VALUES (?, ?, ?, ?)",
+        [channelId, userId, username, content]
+    );
     save();
 }
 
 // Nombre total de messages dans un salon (pour déclencher la résumé)
 function getChannelMessageCount(channelId) {
-    const row = queryOne(
-        "SELECT COUNT(*) as cnt FROM message_history WHERE channel_id = ?",
-        [channelId]
-    );
+    const row = queryOne("SELECT COUNT(*) as cnt FROM message_history WHERE channel_id = ?", [
+        channelId,
+    ]);
     return row ? Number(row.cnt) : 0;
 }
 
@@ -127,7 +128,17 @@ function clearChannelSummary(channelId) {
  */
 function removeChannelMessagesByKeywords(channelId, userId, username, keywords) {
     const raw = Array.isArray(keywords) ? keywords : [];
-    const uniqueNeedles = [...new Set(raw.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean))];
+    const uniqueNeedles = [
+        ...new Set(
+            raw
+                .map((v) =>
+                    String(v || "")
+                        .trim()
+                        .toLowerCase()
+                )
+                .filter(Boolean)
+        ),
+    ];
     if (uniqueNeedles.length === 0) return 0;
 
     let totalRemoved = 0;
