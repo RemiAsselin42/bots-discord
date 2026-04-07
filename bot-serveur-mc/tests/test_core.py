@@ -3,6 +3,7 @@ import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
+import discord
 import pytest
 
 # Les modules sont importés depuis le package bot/
@@ -170,6 +171,7 @@ def _make_interaction(is_admin: bool, role_ids: list[int] | None = None) -> Magi
     """Crée un faux objet Interaction Discord."""
     interaction = MagicMock()
     interaction.guild = MagicMock()
+    interaction.user = MagicMock(spec=discord.Member)
     interaction.user.guild_permissions.administrator = is_admin
     roles = []
     for rid in role_ids or []:
@@ -238,11 +240,15 @@ def test_get_permission_summary_uses_defaults_when_no_config():
 def _config_with_ports(java_ports: list[int], bedrock_ports: list[int]) -> dict:
     """Construit une config avec des serveurs occupant les ports donnés."""
     servers = {}
-    for i, jp in enumerate(java_ports):
-        entry = {"port": jp}
+    n = max(len(java_ports), len(bedrock_ports), 1) if java_ports or bedrock_ports else 0
+    for i in range(n):
+        entry: dict = {}
+        if i < len(java_ports):
+            entry["port"] = java_ports[i]
         if i < len(bedrock_ports):
             entry["bedrock_port"] = bedrock_ports[i]
-        servers[f"server-{i}"] = entry
+        if entry:
+            servers[f"server-{i}"] = entry
     return {"guilds": {"1": {"servers": servers}}}
 
 

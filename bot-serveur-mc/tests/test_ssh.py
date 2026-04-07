@@ -107,40 +107,44 @@ async def test_get_jar_url_for_known_version():
     """Résout correctement une version explicite (1.21.4)."""
     session = _make_session([MANIFEST, VERSION_MANIFEST_1_21_4])
 
-    with patch("bot.ssh.aiohttp.ClientSession", return_value=session):
-        url = await get_jar_url_for_version("1.21.4")
+    with patch("bot.mojang.aiohttp.ClientSession", return_value=session):
+        url, version = await get_jar_url_for_version("1.21.4")
 
     assert url == "https://piston-data.mojang.com/v1/objects/abc123/server.jar"
+    assert version == "1.21.4"
 
 
 async def test_get_jar_url_for_latest_resolves_to_release():
     """L'alias 'latest' se résout en la dernière release du manifeste."""
     session = _make_session([MANIFEST, VERSION_MANIFEST_1_21_4])
 
-    with patch("bot.ssh.aiohttp.ClientSession", return_value=session):
-        url = await get_jar_url_for_version("latest")
+    with patch("bot.mojang.aiohttp.ClientSession", return_value=session):
+        url, version = await get_jar_url_for_version("latest")
 
     assert url == "https://piston-data.mojang.com/v1/objects/abc123/server.jar"
+    assert version == "1.21.4"
 
 
 async def test_get_jar_url_for_older_version():
     """Résout une version ancienne (1.20.1)."""
     session = _make_session([MANIFEST, VERSION_MANIFEST_1_20_1])
 
-    with patch("bot.ssh.aiohttp.ClientSession", return_value=session):
-        url = await get_jar_url_for_version("1.20.1")
+    with patch("bot.mojang.aiohttp.ClientSession", return_value=session):
+        url, version = await get_jar_url_for_version("1.20.1")
 
     assert url == "https://piston-data.mojang.com/v1/objects/def456/server.jar"
+    assert version == "1.20.1"
 
 
 async def test_get_jar_url_for_snapshot():
     """Résout une version snapshot."""
     session = _make_session([MANIFEST, VERSION_MANIFEST_SNAPSHOT])
 
-    with patch("bot.ssh.aiohttp.ClientSession", return_value=session):
-        url = await get_jar_url_for_version("24w09a")
+    with patch("bot.mojang.aiohttp.ClientSession", return_value=session):
+        url, version = await get_jar_url_for_version("24w09a")
 
     assert url == "https://piston-data.mojang.com/v1/objects/ghi789/server.jar"
+    assert version == "24w09a"
 
 
 # ── Tests d'erreur ────────────────────────────────────────────────────────────
@@ -156,7 +160,7 @@ async def test_get_jar_url_raises_for_unknown_version():
     session = _make_session([MANIFEST])
 
     with (
-        patch("bot.ssh.aiohttp.ClientSession", return_value=session),
+        patch("bot.mojang.aiohttp.ClientSession", return_value=session),
         pytest.raises(ValueError, match="inconnue"),
     ):
         await get_jar_url_for_version("version-inexistante")
@@ -175,7 +179,7 @@ async def test_get_jar_url_raises_on_network_error():
     session.__aexit__ = AsyncMock(return_value=False)
 
     with (
-        patch("bot.ssh.aiohttp.ClientSession", return_value=session),
+        patch("bot.mojang.aiohttp.ClientSession", return_value=session),
         pytest.raises(ConnectionError),
     ):
         await get_jar_url_for_version("1.21.4")

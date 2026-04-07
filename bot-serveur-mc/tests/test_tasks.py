@@ -12,6 +12,7 @@ import asyncio
 import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import discord
 import pytest
 
 from bot.tasks import (
@@ -28,7 +29,7 @@ from bot.tasks import (
 
 def _make_bot(channel_send: AsyncMock | None = None) -> MagicMock:
     bot = MagicMock()
-    channel = MagicMock()
+    channel = MagicMock(spec=discord.abc.Messageable)
     channel.send = channel_send or AsyncMock()
     bot.get_channel.return_value = channel
     return bot
