@@ -128,15 +128,17 @@ async def update_duckdns(domain: str, token: str, ip: str) -> bool:
     subdomain = domain.split(".")[0] if "." in domain else domain
     url = f"https://www.duckdns.org/update?domains={subdomain}&token={token}&ip={ip}"
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                body = await resp.text()
-                success = body.strip().upper() == "OK"
-                if success:
-                    logger.info("DuckDNS mis à jour : %s → %s", subdomain, ip)
-                else:
-                    logger.warning("DuckDNS réponse inattendue : %r", body)
-                return success
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp,
+        ):
+            body = await resp.text()
+            success = body.strip().upper() == "OK"
+            if success:
+                logger.info("DuckDNS mis à jour : %s → %s", subdomain, ip)
+            else:
+                logger.warning("DuckDNS réponse inattendue : %r", body)
+            return success
     except Exception as e:
         logger.error("Erreur mise à jour DuckDNS : %s", e)
         return False

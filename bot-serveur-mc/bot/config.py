@@ -95,7 +95,9 @@ def set_guild_default(guild_id: int, param: str, value: str, config: dict) -> No
         try:
             defaults[param] = float(value)
         except ValueError:
-            raise ValueError("Le coût horaire doit être un nombre décimal. Exemple : `0.0416`")
+            raise ValueError(
+                "Le coût horaire doit être un nombre décimal. Exemple : `0.0416`"
+            ) from None
     elif param == "max_ram":
         if not re.match(r"^\d+[GM]$", value.upper()):
             raise ValueError("Format RAM invalide. Exemples : `2G`, `1536M` (entiers uniquement)")

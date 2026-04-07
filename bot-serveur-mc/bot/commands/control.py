@@ -7,13 +7,13 @@ from bot.autocomplete import server_autocomplete
 from bot.aws import format_boto_error, get_ec2_client
 from bot.config import get_server_config, load_config
 from bot.helpers import is_valid_instance_id, require_guild
-from bot.permissions import check_permission
 from bot.minecraft_process import (
     check_other_mc_servers_running,
     is_minecraft_process_running,
     start_minecraft_process,
     stop_minecraft_server,
 )
+from bot.permissions import check_permission
 from bot.ssh import get_instance_public_ip
 from bot.tasks import notify_restart_ready, notify_server_ready
 
@@ -70,7 +70,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 ec2.start_instances(InstanceIds=[instance_id])
                 status_msg = f":green_circle: Démarrage du serveur **{name}**… Je vous notifie dès qu'il est prêt !"
             else:
-                status_msg = f":arrows_counterclockwise: Lancement du processus Minecraft…"
+                status_msg = ":arrows_counterclockwise: Lancement du processus Minecraft…"
 
             await interaction.response.send_message(status_msg)
 

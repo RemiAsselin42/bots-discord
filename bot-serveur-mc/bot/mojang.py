@@ -54,11 +54,10 @@ async def get_player_uuid(username: str) -> tuple[str, str]:
     Lève ValueError si le joueur est introuvable.
     """
     url = f"https://api.mojang.com/users/profiles/minecraft/{username}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as resp:
-            if resp.status == 404:
-                raise ValueError(f"Joueur Minecraft introuvable : {username}")
-            data = await resp.json()
+    async with aiohttp.ClientSession() as session, session.get(url) as resp:
+        if resp.status == 404:
+            raise ValueError(f"Joueur Minecraft introuvable : {username}")
+        data = await resp.json()
     raw_uuid: str = data["id"]  # sans tirets, ex: "550e8400e29b41d4a716446655440000"
     uuid = f"{raw_uuid[:8]}-{raw_uuid[8:12]}-{raw_uuid[12:16]}-{raw_uuid[16:20]}-{raw_uuid[20:]}"
     return uuid, data["name"]

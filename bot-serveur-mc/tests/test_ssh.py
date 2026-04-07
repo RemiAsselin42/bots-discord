@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bot.mojang import MOJANG_MANIFEST_URL, get_jar_url_for_version
+from bot.mojang import get_jar_url_for_version
 
 # ── Fixtures de données ───────────────────────────────────────────────────────
 
@@ -155,9 +155,11 @@ async def test_get_jar_url_raises_for_unknown_version():
     """
     session = _make_session([MANIFEST])
 
-    with patch("bot.ssh.aiohttp.ClientSession", return_value=session):
-        with pytest.raises(ValueError, match="inconnue"):
-            await get_jar_url_for_version("version-inexistante")
+    with (
+        patch("bot.ssh.aiohttp.ClientSession", return_value=session),
+        pytest.raises(ValueError, match="inconnue"),
+    ):
+        await get_jar_url_for_version("version-inexistante")
 
 
 async def test_get_jar_url_raises_on_network_error():
@@ -172,9 +174,11 @@ async def test_get_jar_url_raises_on_network_error():
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("bot.ssh.aiohttp.ClientSession", return_value=session):
-        with pytest.raises(ConnectionError):
-            await get_jar_url_for_version("1.21.4")
+    with (
+        patch("bot.ssh.aiohttp.ClientSession", return_value=session),
+        pytest.raises(ConnectionError),
+    ):
+        await get_jar_url_for_version("1.21.4")
 
 
 # ── Test : une seule session pour les deux requêtes ───────────────────────────

@@ -1,17 +1,13 @@
 import asyncio
+import contextlib
 import os
 import re
 
 import discord
+from botocore.exceptions import ClientError
 from discord import app_commands
 
-from bot.minecraft_process import edit_minecraft_properties, setup_minecraft_server
-from bot.mojang import get_jar_url_for_version, get_player_uuid
-from bot.papermc import get_paper_jar_url, get_viaversion_jar_url
-from bot.fabric import get_fabric_jar_url, get_modrinth_mod_url
 from bot.autocomplete import server_autocomplete, version_autocomplete
-from botocore.exceptions import ClientError
-
 from bot.aws import format_boto_error, get_ec2_client, get_instance_state, manage_sg_port
 from bot.config import (
     DEFAULT_HOURLY_COST,
@@ -25,7 +21,11 @@ from bot.config import (
     save_config,
     set_guild_default,
 )
+from bot.fabric import get_fabric_jar_url, get_modrinth_mod_url
 from bot.helpers import require_admin, require_guild, resolve_duckdns_host, slugify_name
+from bot.minecraft_process import edit_minecraft_properties, setup_minecraft_server
+from bot.mojang import get_jar_url_for_version, get_player_uuid
+from bot.papermc import get_paper_jar_url, get_viaversion_jar_url
 from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_full_permission_summary
 from bot.port_manager import assign_bedrock_port, assign_port
 
@@ -71,7 +71,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
     ) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(f":arrows_counterclockwise: Démarrage de l'instance…")
+        await interaction.followup.send(":arrows_counterclockwise: Démarrage de l'instance…")
         asyncio.create_task(self._start_then_edit(interaction))
         self.stop()
 
@@ -122,7 +122,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
             return
 
         await btn_interaction.followup.send(
-            f":white_check_mark: Instance démarrée.\nAttente que SSH soit disponible (30s)…"
+            ":white_check_mark: Instance démarrée.\nAttente que SSH soit disponible (30s)…"
         )
         await asyncio.sleep(30)
 
@@ -200,7 +200,7 @@ class _InstanceStartView(discord.ui.View):
     ) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(f":arrows_counterclockwise: Démarrage de l'instance…")
+        await interaction.followup.send(":arrows_counterclockwise: Démarrage de l'instance…")
         asyncio.create_task(self._start_then_setup(interaction))
         self.stop()
 
@@ -269,7 +269,7 @@ class _InstanceStartView(discord.ui.View):
             return
 
         await btn_interaction.followup.send(
-            f":white_check_mark: Instance démarrée.\nAttente que SSH soit disponible (30s)…"
+            ":white_check_mark: Instance démarrée.\nAttente que SSH soit disponible (30s)…"
         )
         await asyncio.sleep(30)
         await _run_ssh_setup(
@@ -341,9 +341,10 @@ class _RemoveServerStartForDeleteView(discord.ui.View):
         self.stop()
 
     async def _start_then_delete(self, btn_interaction: discord.Interaction) -> None:
+        from botocore.exceptions import ClientError
+
         from bot.aws import get_ec2_client, get_instance_state
         from bot.ssh import get_instance_public_ip
-        from botocore.exceptions import ClientError
 
         try:
             ec2 = get_ec2_client(self._region)
@@ -468,10 +469,9 @@ class _RemoveServerDeleteView(discord.ui.View):
         self.stop()
 
     async def _do_delete(self, btn_interaction: discord.Interaction) -> None:
-        from bot.ssh import _resolve_host
-        from bot.minecraft_process import MC_SERVER_USER
-        from bot.config import load_config
         import os
+
+        from bot.minecraft_process import MC_SERVER_USER
 
         _user = MC_SERVER_USER
         _key_path = os.getenv("MC_SERVER_KEY_PATH", "")
@@ -861,7 +861,6 @@ def setup(tree: app_commands.CommandTree) -> None:
                 )
             )
         else:
-            state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
             view = _InstanceStartView(
                 original_interaction=interaction,
                 server_key=key,
@@ -913,12 +912,10 @@ def setup(tree: app_commands.CommandTree) -> None:
         ssh_host = server_data.get("ssh_host") or None
 
         # Résoudre l'IP SSH si nécessaire
-        from bot.ssh import get_instance_public_ip
         from bot.minecraft_process import (
             is_minecraft_process_running,
-            stop_minecraft_server,
-            MC_SERVER_USER,
         )
+        from bot.ssh import get_instance_public_ip
 
         if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
             try:
@@ -1290,8 +1287,6 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         instance_state = await asyncio.to_thread(get_instance_state, instance_id, region)
         if instance_state != "running":
-            state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
-
             # Résoudre les UUIDs Mojang en avance pour les inclure dans la View
             ops_to_add, whitelist_to_add, uuid_errors = await _resolve_uuid_lists(
                 add_admin, add_whitelist
@@ -1417,19 +1412,15 @@ async def _run_ssh_setup(
 
     viaversion_url: str | None = None
     if server_type == SERVER_TYPE_BEDROCK:
-        try:
+        with contextlib.suppress(Exception):
             viaversion_url = await get_viaversion_jar_url()
-        except Exception:
-            pass  # Le script shell échouera avec un message d'erreur explicite
 
     mod_urls: list[str] = []
     if server_type == SERVER_TYPE_FABRIC:
         config = load_config()
         for slug in get_optimization_mods(config):
-            try:
+            with contextlib.suppress(Exception):
                 mod_urls.append(await get_modrinth_mod_url(slug, version))
-            except Exception:
-                pass  # Mod indisponible pour cette version, ignoré silencieusement
 
     success, message = await asyncio.to_thread(
         setup_minecraft_server,
@@ -1452,7 +1443,7 @@ async def _run_ssh_setup(
         extra = ""
         if duckdns_domain:
             full_domain = resolve_duckdns_host(duckdns_domain)
-            extra = f"\**Adresse IP :** `{full_domain}:{port}`"
+            extra = rf"\**Adresse IP :** `{full_domain}:{port}`"
             if server_type == SERVER_TYPE_BEDROCK and bedrock_port:
                 extra += f"\nBedrock: `{full_domain}:{bedrock_port}` (UDP)"
 

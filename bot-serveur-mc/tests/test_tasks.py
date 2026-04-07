@@ -16,8 +16,8 @@ import pytest
 
 from bot.tasks import (
     _DEFAULT_IDLE_TIMEOUT,
-    _RCON_READY_RETRIES,
     _RCON_READY_INTERVAL,
+    _RCON_READY_RETRIES,
     _check_and_stop_if_idle,
     _idle_since,
     notify_server_ready,

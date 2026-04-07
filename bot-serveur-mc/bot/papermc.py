@@ -16,9 +16,11 @@ HANGAR_VIAVERSION_CDN_BASE = "https://hangarcdn.papermc.io/plugins/ViaVersion/Vi
 
 async def get_viaversion_jar_url() -> str:
     """Retourne l'URL CDN du dernier JAR ViaVersion pour Paper."""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(HANGAR_VIAVERSION_LATEST_URL) as resp:
-            version = (await resp.text()).strip().strip('"')
+    async with (
+        aiohttp.ClientSession() as session,
+        session.get(HANGAR_VIAVERSION_LATEST_URL) as resp,
+    ):
+        version = (await resp.text()).strip().strip('"')
     return f"{HANGAR_VIAVERSION_CDN_BASE}/{version}/PAPER/ViaVersion-{version}.jar"
 
 

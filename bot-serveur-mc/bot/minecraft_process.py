@@ -649,7 +649,7 @@ def edit_minecraft_properties(
     server_dir = f"/home/{_user}/minecraft-servers/{server_key}"
     props_file = f"{server_dir}/server.properties"
 
-    parts: list[str] = [f"set -e", f'PROPS="{props_file}"', ""]
+    parts: list[str] = ["set -e", f'PROPS="{props_file}"', ""]
 
     changes: list[str] = []
 
@@ -734,7 +734,7 @@ img.save("{server_dir}/server-icon.png", "PNG")
 PYEOF
   rm -f {server_dir}/server-icon.png.tmp
 ) || true""")
-        changes.append(f"• icône mise à jour")
+        changes.append("• icône mise à jour")
 
     if not changes:
         return (False, "Aucun paramètre fourni.")

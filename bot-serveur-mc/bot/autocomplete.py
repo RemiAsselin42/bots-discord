@@ -7,7 +7,7 @@ import discord
 from discord import app_commands
 
 from bot.config import get_guild_servers, load_config
-from bot.mojang import MOJANG_MANIFEST_URL, MAX_MC_VERSION, _parse_mc_version
+from bot.mojang import MAX_MC_VERSION, MOJANG_MANIFEST_URL, _parse_mc_version
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,8 @@ async def version_autocomplete(
 
     if _mc_versions_cache is None or (time.monotonic() - _mc_versions_cache_time) > _CACHE_TTL:
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(MOJANG_MANIFEST_URL) as resp:
-                    data = await resp.json()
+            async with aiohttp.ClientSession() as session, session.get(MOJANG_MANIFEST_URL) as resp:
+                data = await resp.json()
             _mc_versions_cache = data["versions"]
             _mc_versions_cache_time = time.monotonic()
         except Exception:

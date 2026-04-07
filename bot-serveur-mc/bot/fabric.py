@@ -42,7 +42,7 @@ async def get_fabric_jar_url(mc_version: str) -> tuple[str, str]:
             resp.raise_for_status()
             loaders = await resp.json()
         loader_version = next(
-            (l["version"] for l in loaders if l.get("stable")), loaders[0]["version"]
+            (loader["version"] for loader in loaders if loader.get("stable")), loaders[0]["version"]
         )
 
         # 2. Récupérer la version stable la plus récente de l'installer
