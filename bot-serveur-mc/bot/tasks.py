@@ -14,6 +14,16 @@ from mcstatus import JavaServer
 from bot.aws import get_ec2_client
 from bot.config import load_config
 from bot.helpers import is_valid_instance_id, resolve_duckdns_host
+from bot.minecraft_process import (
+    MC_SERVER_KEY_PATH,
+    MC_SERVER_USER,
+    check_other_mc_servers_running,
+    check_rcon_ready,
+    is_minecraft_process_running,
+    start_minecraft_process,
+    stop_minecraft_server,
+)
+from bot.ssh import get_instance_public_ip, ssh_execute, update_duckdns
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +60,6 @@ async def notify_server_ready(
     Phase 4 : Lance le processus Java Minecraft.
     Phase 5 : Notifie dans le canal Discord.
     """
-    from bot.minecraft_process import (
-        MC_SERVER_KEY_PATH,
-        MC_SERVER_USER,
-        check_rcon_ready,
-        start_minecraft_process,
-    )
-    from bot.ssh import get_instance_public_ip, ssh_execute, update_duckdns
-
     ec2 = get_ec2_client(region)
     elapsed = 0
     public_ip: str | None = None
@@ -208,8 +210,6 @@ async def notify_restart_ready(
     ssh_host: str | None = None,
 ) -> None:
     """Attend que RCON soit disponible après un restart Java, puis notifie le canal Discord."""
-    from bot.minecraft_process import check_rcon_ready
-
     for _ in range(_RCON_READY_RETRIES):
         await asyncio.sleep(_RCON_READY_INTERVAL)
         ok, _ = await asyncio.to_thread(check_rcon_ready, server_key, host=ssh_host)
@@ -293,8 +293,44 @@ async def _check_and_stop_if_idle(
         status = await asyncio.wait_for(mc.async_status(), timeout=5.0)
         player_count = status.players.online
     except (asyncio.TimeoutError, Exception):
-        # Serveur MC injoignable ou timeout : peut-être en démarrage, on ne compte pas comme inactif
-        _idle_since.pop((guild_str, server_key), None)
+        # Serveur MC injoignable ou timeout : vérifier si le processus Java tourne encore via SSH.
+        # Si Java tourne → serveur en cours de démarrage, on ne compte pas comme inactif.
+        # Si Java est arrêté → instance zombie, on procède à l'arrêt EC2.
+        ssh_host = server_config.get("ssh_host") or None
+        ssh_ok, java_running = await asyncio.to_thread(
+            is_minecraft_process_running, server_key, host=ssh_host
+        )
+        if not ssh_ok or java_running:
+            # SSH injoignable ou Java en cours d'exécution → peut-être en démarrage, on attend
+            _idle_since.pop((guild_str, server_key), None)
+            return
+        # SSH ok et Java arrêté → instance zombie : arrêter EC2 si aucun autre serveur actif
+        logger.info("Auto-stop [%s] : Java arrêté mais EC2 running (instance zombie), vérification des autres serveurs", name)
+        check_success, running_others = await asyncio.to_thread(
+            check_other_mc_servers_running, server_key, host=ssh_host
+        )
+        if not check_success or running_others:
+            _idle_since.pop((guild_str, server_key), None)
+            if not check_success:
+                logger.warning("Auto-stop [%s] : instance zombie mais SSH injoignable pour check_other, instance conservée", name)
+            else:
+                logger.info("Auto-stop [%s] : instance zombie mais autres serveurs actifs (%s), instance conservée", name, ", ".join(running_others))
+            return
+        # Aucun autre serveur actif → arrêt de l'instance EC2
+        try:
+            ec2.stop_instances(InstanceIds=[instance_id])
+            _idle_since.pop((guild_str, server_key), None)
+            logger.info("Auto-stop [%s] : instance zombie arrêtée (Java absent, aucun autre serveur actif)", name)
+            if notification_channel_id:
+                channel = bot.get_channel(int(notification_channel_id))
+                if channel:
+                    await channel.send(
+                        f":red_circle: **Auto-stop (zombie)** : l'instance du serveur **{name}** a été arrêtée "
+                        "automatiquement car le processus Java n'est plus en cours d'exécution "
+                        "(instance EC2 allumée sans serveur Minecraft actif)."
+                    )
+        except Exception as exc:
+            logger.error("Auto-stop [%s] : échec de l'arrêt EC2 (instance zombie) : %s", name, exc)
         return
 
     key = (guild_str, server_key)
@@ -316,8 +352,6 @@ async def _check_and_stop_if_idle(
         return
 
     # Seuil atteint : arrêt automatique
-    from bot.minecraft_process import check_other_mc_servers_running, stop_minecraft_server
-
     # Résolution de l'hôte SSH : priorité à la config par serveur
     ssh_host = server_config.get("ssh_host") or None
 
