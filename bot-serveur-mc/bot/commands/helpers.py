@@ -1,6 +1,7 @@
 """
 Fonctions utilitaires partagées entre les commandes de type uptime/cost.
 """
+
 import datetime
 
 from bot.aws import get_ec2_client

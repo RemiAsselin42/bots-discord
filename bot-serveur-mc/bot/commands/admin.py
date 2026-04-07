@@ -13,7 +13,18 @@ from bot.autocomplete import server_autocomplete, version_autocomplete
 from botocore.exceptions import ClientError
 
 from bot.aws import format_boto_error, get_ec2_client, get_instance_state, manage_sg_port
-from bot.config import DEFAULT_HOURLY_COST, GUILD_DEFAULT_PARAMS, SERVER_TYPE_BEDROCK, SERVER_TYPE_FABRIC, SERVER_TYPE_VANILLA, get_guild_defaults, get_optimization_mods, load_config, save_config, set_guild_default
+from bot.config import (
+    DEFAULT_HOURLY_COST,
+    GUILD_DEFAULT_PARAMS,
+    SERVER_TYPE_BEDROCK,
+    SERVER_TYPE_FABRIC,
+    SERVER_TYPE_VANILLA,
+    get_guild_defaults,
+    get_optimization_mods,
+    load_config,
+    save_config,
+    set_guild_default,
+)
 from bot.helpers import require_admin, require_guild, resolve_duckdns_host, slugify_name
 from bot.permissions import CONFIGURABLE_COMMANDS, DEFAULT_PERMISSIONS, get_full_permission_summary
 from bot.port_manager import assign_bedrock_port, assign_port
@@ -55,12 +66,12 @@ class _InstanceStartForPropertiesView(discord.ui.View):
             child.disabled = True  # type: ignore[attr-defined]
 
     @discord.ui.button(label="Démarrer et modifier", style=discord.ButtonStyle.green, emoji="▶️")
-    async def start_and_edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def start_and_edit(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            f":arrows_counterclockwise: Démarrage de l'instance…"
-        )
+        await interaction.followup.send(f":arrows_counterclockwise: Démarrage de l'instance…")
         asyncio.create_task(self._start_then_edit(interaction))
         self.stop()
 
@@ -79,12 +90,22 @@ class _InstanceStartForPropertiesView(discord.ui.View):
             code = e.response["Error"]["Code"]
             if code != "IncorrectInstanceState":
                 await btn_interaction.followup.send(
-                    format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region)
+                    format_boto_error(
+                        e,
+                        action="démarrer l'instance",
+                        instance_id=self._instance_id,
+                        region=self._region,
+                    )
                 )
                 return
         except Exception as e:
             await btn_interaction.followup.send(
-                format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region)
+                format_boto_error(
+                    e,
+                    action="démarrer l'instance",
+                    instance_id=self._instance_id,
+                    region=self._region,
+                )
             )
             return
 
@@ -101,8 +122,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
             return
 
         await btn_interaction.followup.send(
-            f":white_check_mark: Instance démarrée.\n"
-            "Attente que SSH soit disponible (30s)…"
+            f":white_check_mark: Instance démarrée.\nAttente que SSH soit disponible (30s)…"
         )
         await asyncio.sleep(30)
 
@@ -121,7 +141,9 @@ class _InstanceStartForPropertiesView(discord.ui.View):
             warning = ""
             if self._motd or self._max_players is not None or self._gamemode:
                 warning = f"\n\n:warning: Redémarrez le serveur avec `/restart {self._server_key}` pour appliquer les changements de `server.properties`."
-            error_note = ("\n\n:warning: " + "\n".join(self._uuid_errors)) if self._uuid_errors else ""
+            error_note = (
+                ("\n\n:warning: " + "\n".join(self._uuid_errors)) if self._uuid_errors else ""
+            )
             await btn_interaction.followup.send(
                 f":white_check_mark: Propriétés du serveur **{self._display_name}** mises à jour :\n{result}{warning}{error_note}"
             )
@@ -173,22 +195,25 @@ class _InstanceStartView(discord.ui.View):
             child.disabled = True  # type: ignore[attr-defined]
 
     @discord.ui.button(label="Démarrer et installer", style=discord.ButtonStyle.green, emoji="▶️")
-    async def start_and_install(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def start_and_install(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            f":arrows_counterclockwise: Démarrage de l'instance…"
-        )
+        await interaction.followup.send(f":arrows_counterclockwise: Démarrage de l'instance…")
         asyncio.create_task(self._start_then_setup(interaction))
         self.stop()
 
     @discord.ui.button(label="Installer plus tard", style=discord.ButtonStyle.secondary, emoji="⏭️")
-    async def install_later(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def install_later(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
         bedrock_note = (
             f"\n# Port Bedrock (UDP) : {self._bedrock_port}"
-            if self._server_type == SERVER_TYPE_BEDROCK and self._bedrock_port else ""
+            if self._server_type == SERVER_TYPE_BEDROCK and self._bedrock_port
+            else ""
         )
         await interaction.followup.send(
             f":information_source: Installation reportée. Créez manuellement le dossier :\n"
@@ -210,13 +235,23 @@ class _InstanceStartView(discord.ui.View):
             code = e.response["Error"]["Code"]
             if code != "IncorrectInstanceState":
                 await btn_interaction.followup.send(
-                    format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region)
+                    format_boto_error(
+                        e,
+                        action="démarrer l'instance",
+                        instance_id=self._instance_id,
+                        region=self._region,
+                    )
                 )
                 return
             # IncorrectInstanceState = déjà en cours de démarrage, on poll quand même
         except Exception as e:
             await btn_interaction.followup.send(
-                format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region)
+                format_boto_error(
+                    e,
+                    action="démarrer l'instance",
+                    instance_id=self._instance_id,
+                    region=self._region,
+                )
             )
             return
 
@@ -234,15 +269,24 @@ class _InstanceStartView(discord.ui.View):
             return
 
         await btn_interaction.followup.send(
-            f":white_check_mark: Instance démarrée.\n"
-            "Attente que SSH soit disponible (30s)…"
+            f":white_check_mark: Instance démarrée.\nAttente que SSH soit disponible (30s)…"
         )
         await asyncio.sleep(30)
         await _run_ssh_setup(
-            self._orig, self._server_key, self._port, self._name, self._instance_id, self._region, self._version,
-            motd=self._motd, max_players=self._max_players, gamemode=self._gamemode,
-            seed=self._seed, icon_url=self._icon_url,
-            server_type=self._server_type, bedrock_port=self._bedrock_port,
+            self._orig,
+            self._server_key,
+            self._port,
+            self._name,
+            self._instance_id,
+            self._region,
+            self._version,
+            motd=self._motd,
+            max_players=self._max_players,
+            gamemode=self._gamemode,
+            seed=self._seed,
+            icon_url=self._icon_url,
+            server_type=self._server_type,
+            bedrock_port=self._bedrock_port,
         )
 
 
@@ -272,19 +316,26 @@ class _RemoveServerStartForDeleteView(discord.ui.View):
             child.disabled = True  # type: ignore[attr-defined]
 
     @discord.ui.button(label="Démarrer et supprimer", style=discord.ButtonStyle.danger, emoji="▶️")
-    async def start_and_delete(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+    async def start_and_delete(
+        self, interaction: discord.Interaction, _button: discord.ui.Button
+    ) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(":arrows_counterclockwise: Démarrage de l'instance…", ephemeral=True)
+        await interaction.followup.send(
+            ":arrows_counterclockwise: Démarrage de l'instance…", ephemeral=True
+        )
         asyncio.create_task(self._start_then_delete(interaction))
         self.stop()
 
-    @discord.ui.button(label="Laisser les fichiers", style=discord.ButtonStyle.secondary, emoji="📁")
+    @discord.ui.button(
+        label="Laisser les fichiers", style=discord.ButtonStyle.secondary, emoji="📁"
+    )
     async def skip(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            self._base_result + "\n:information_source: Les fichiers sur l'instance ont été conservés.",
+            self._base_result
+            + "\n:information_source: Les fichiers sur l'instance ont été conservés.",
             ephemeral=True,
         )
         self.stop()
@@ -302,14 +353,18 @@ class _RemoveServerStartForDeleteView(discord.ui.View):
                 await btn_interaction.followup.send(
                     self._base_result
                     + "\n:warning: Impossible de démarrer l'instance : "
-                    + format_boto_error(e, action="démarrer l'instance", instance_id=self._instance_id, region=self._region),
+                    + format_boto_error(
+                        e,
+                        action="démarrer l'instance",
+                        instance_id=self._instance_id,
+                        region=self._region,
+                    ),
                     ephemeral=True,
                 )
                 return
         except Exception as e:
             await btn_interaction.followup.send(
-                self._base_result
-                + f"\n:warning: Impossible de démarrer l'instance : {e}",
+                self._base_result + f"\n:warning: Impossible de démarrer l'instance : {e}",
                 ephemeral=True,
             )
             return
@@ -329,15 +384,18 @@ class _RemoveServerStartForDeleteView(discord.ui.View):
             )
             return
 
-        await btn_interaction.followup.send(":white_check_mark: Instance démarrée. Attente SSH (30s)…", ephemeral=True)
+        await btn_interaction.followup.send(
+            ":white_check_mark: Instance démarrée. Attente SSH (30s)…", ephemeral=True
+        )
         await asyncio.sleep(30)
 
         try:
-            ssh_host = await asyncio.to_thread(get_instance_public_ip, self._instance_id, self._region)
+            ssh_host = await asyncio.to_thread(
+                get_instance_public_ip, self._instance_id, self._region
+            )
         except Exception as e:
             await btn_interaction.followup.send(
-                self._base_result
-                + f"\n:warning: Impossible de récupérer l'IP de l'instance : {e}",
+                self._base_result + f"\n:warning: Impossible de récupérer l'IP de l'instance : {e}",
                 ephemeral=True,
             )
             return
@@ -388,18 +446,23 @@ class _RemoveServerDeleteView(discord.ui.View):
             child.disabled = True  # type: ignore[attr-defined]
 
     @discord.ui.button(label="Supprimer les fichiers", style=discord.ButtonStyle.danger, emoji="🗑️")
-    async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def confirm_delete(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
         asyncio.create_task(self._do_delete(interaction))
         self.stop()
 
-    @discord.ui.button(label="Conserver les fichiers", style=discord.ButtonStyle.secondary, emoji="📁")
+    @discord.ui.button(
+        label="Conserver les fichiers", style=discord.ButtonStyle.secondary, emoji="📁"
+    )
     async def keep_files(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         self._disable_all()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            self._base_result + "\n:information_source: Les fichiers sur l'instance ont été conservés.",
+            self._base_result
+            + "\n:information_source: Les fichiers sur l'instance ont été conservés.",
             ephemeral=True,
         )
         self.stop()
@@ -422,6 +485,7 @@ class _RemoveServerDeleteView(discord.ui.View):
             return
 
         from bot.ssh import ssh_execute
+
         command = f"rm -rf /home/{_user}/minecraft-servers/{self._server_key}"
         success, output = await asyncio.to_thread(
             ssh_execute, self._ssh_host, _user, _key_path, command, 30
@@ -503,7 +567,8 @@ class _RemoveServerView(discord.ui.View):
         # Étape 1 : arrêt du processus Java si nécessaire
         if self._java_running:
             await btn_interaction.followup.send(
-                f":arrows_counterclockwise: Arrêt du serveur **{self._name}** en cours…", ephemeral=True
+                f":arrows_counterclockwise: Arrêt du serveur **{self._name}** en cours…",
+                ephemeral=True,
             )
             success, output = await asyncio.to_thread(
                 stop_minecraft_server, self._server_key, host=self._ssh_host
@@ -511,7 +576,9 @@ class _RemoveServerView(discord.ui.View):
             if success:
                 lines.append(":red_circle: Processus Java arrêté.")
             else:
-                lines.append(f":warning: Impossible d'arrêter le processus Java :\n```\n{output}\n```")
+                lines.append(
+                    f":warning: Impossible d'arrêter le processus Java :\n```\n{output}\n```"
+                )
 
         # Étape 2 : suppression de la config Discord
         config = load_config()
@@ -527,26 +594,49 @@ class _RemoveServerView(discord.ui.View):
         # Étape 3 : révocation du port AWS
         if self._port and self._instance_id:
             try:
-                await asyncio.to_thread(manage_sg_port, self._instance_id, self._region, self._port, "revoke")
-                lines.append(f":white_check_mark: Port `{self._port}` révoqué dans le Security Group.")
+                await asyncio.to_thread(
+                    manage_sg_port, self._instance_id, self._region, self._port, "revoke"
+                )
+                lines.append(
+                    f":white_check_mark: Port `{self._port}` révoqué dans le Security Group."
+                )
             except Exception as e:
                 lines.append(
                     f":warning: Port `{self._port}` non révoqué : "
-                    + format_boto_error(e, action="révoquer le port", instance_id=self._instance_id, region=self._region)
+                    + format_boto_error(
+                        e,
+                        action="révoquer le port",
+                        instance_id=self._instance_id,
+                        region=self._region,
+                    )
                 )
 
         # Étape 3b : révocation du port Bedrock UDP
         if self._bedrock_port and self._instance_id:
             try:
-                await asyncio.to_thread(manage_sg_port, self._instance_id, self._region, self._bedrock_port, "revoke", "udp")
+                await asyncio.to_thread(
+                    manage_sg_port,
+                    self._instance_id,
+                    self._region,
+                    self._bedrock_port,
+                    "revoke",
+                    "udp",
+                )
                 lines.append(f":white_check_mark: Port Bedrock `{self._bedrock_port}/udp` révoqué.")
             except Exception as e:
                 lines.append(
                     f":warning: Port Bedrock `{self._bedrock_port}/udp` non révoqué : "
-                    + format_boto_error(e, action="révoquer le port Bedrock", instance_id=self._instance_id, region=self._region)
+                    + format_boto_error(
+                        e,
+                        action="révoquer le port Bedrock",
+                        instance_id=self._instance_id,
+                        region=self._region,
+                    )
                 )
 
-        base_result = f":wastebasket: Serveur **{self._name}** (`{self._server_key}`) :\n" + "\n".join(lines)
+        base_result = (
+            f":wastebasket: Serveur **{self._name}** (`{self._server_key}`) :\n" + "\n".join(lines)
+        )
 
         # Étape 4 : proposition de supprimer les fichiers sur l'instance
         if self._ssh_host:
@@ -595,15 +685,18 @@ class _RemoveServerView(discord.ui.View):
 # Doit rester cohérent avec GUILD_DEFAULT_PARAMS dans config.py.
 _PARAM_LABELS: dict[str, str] = {
     "instance_id": "ID d'instance EC2",
-    "region":      "Région AWS",
+    "region": "Région AWS",
     "hourly_cost": "Coût horaire ($)",
-    "max_ram":     "RAM maximale",
+    "max_ram": "RAM maximale",
 }
 
 
 def setup(tree: app_commands.CommandTree) -> None:
 
-    @tree.command(name="createserver", description="Crée un nouveau serveur Minecraft avec attribution automatique de port")
+    @tree.command(
+        name="createserver",
+        description="Crée un nouveau serveur Minecraft avec attribution automatique de port",
+    )
     @app_commands.describe(
         name="Nom affiché du serveur",
         instance_id="ID de l'instance EC2 AWS (laissez vide pour utiliser le défaut de la guild)",
@@ -617,16 +710,20 @@ def setup(tree: app_commands.CommandTree) -> None:
         icon_url="URL d'une image PNG 64×64 pour l'icône du serveur",
         server_type="Type de serveur (Vanilla, Bedrock avec Geyser, ou Fabric avec mods d'optimisation)",
     )
-    @app_commands.choices(server_type=[
-        app_commands.Choice(name="Vanilla", value=SERVER_TYPE_VANILLA),
-        app_commands.Choice(name="Bedrock", value=SERVER_TYPE_BEDROCK),
-        app_commands.Choice(name="Modé (Fabric)", value=SERVER_TYPE_FABRIC),
-    ])
-    @app_commands.choices(gamemode=[
-        app_commands.Choice(name="Survie", value="survival"),
-        app_commands.Choice(name="Créatif", value="creative"),
-        app_commands.Choice(name="Hardcore", value="hardcore"),
-    ])
+    @app_commands.choices(
+        server_type=[
+            app_commands.Choice(name="Vanilla", value=SERVER_TYPE_VANILLA),
+            app_commands.Choice(name="Bedrock", value=SERVER_TYPE_BEDROCK),
+            app_commands.Choice(name="Modé (Fabric)", value=SERVER_TYPE_FABRIC),
+        ]
+    )
+    @app_commands.choices(
+        gamemode=[
+            app_commands.Choice(name="Survie", value="survival"),
+            app_commands.Choice(name="Créatif", value="creative"),
+            app_commands.Choice(name="Hardcore", value="hardcore"),
+        ]
+    )
     @app_commands.autocomplete(version=version_autocomplete)
     @require_guild
     @require_admin
@@ -689,7 +786,9 @@ def setup(tree: app_commands.CommandTree) -> None:
         bedrock_port = None
         if server_type == SERVER_TYPE_BEDROCK:
             try:
-                bedrock_port = assign_bedrock_port(config, interaction.guild.id, instance_id=instance_id)
+                bedrock_port = assign_bedrock_port(
+                    config, interaction.guild.id, instance_id=instance_id
+                )
             except ValueError as e:
                 await interaction.response.send_message(f":x: {e}", ephemeral=True)
                 return
@@ -712,7 +811,9 @@ def setup(tree: app_commands.CommandTree) -> None:
         try:
             save_config(config)
         except Exception as e:
-            await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            await interaction.response.send_message(
+                f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True
+            )
             return
 
         if server_type == SERVER_TYPE_BEDROCK:
@@ -741,12 +842,24 @@ def setup(tree: app_commands.CommandTree) -> None:
             await interaction.response.send_message(
                 base_confirm + ":hourglass: **Installation en cours sur l'instance EC2...**"
             )
-            asyncio.create_task(_run_ssh_setup(
-                interaction, key, port, name, instance_id, region, version,
-                motd=motd, max_players=max_players, gamemode=gamemode,
-                seed=seed, icon_url=icon_url,
-                server_type=server_type, bedrock_port=bedrock_port,
-            ))
+            asyncio.create_task(
+                _run_ssh_setup(
+                    interaction,
+                    key,
+                    port,
+                    name,
+                    instance_id,
+                    region,
+                    version,
+                    motd=motd,
+                    max_players=max_players,
+                    gamemode=gamemode,
+                    seed=seed,
+                    icon_url=icon_url,
+                    server_type=server_type,
+                    bedrock_port=bedrock_port,
+                )
+            )
         else:
             state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
             view = _InstanceStartView(
@@ -766,13 +879,14 @@ def setup(tree: app_commands.CommandTree) -> None:
                 bedrock_port=bedrock_port,
             )
             await interaction.response.send_message(
-                base_confirm
-                + f":warning: L'instance `{instance_id}` est actuellement à l'arrêt.\n"
+                base_confirm + f":warning: L'instance `{instance_id}` est actuellement à l'arrêt.\n"
                 "Souhaitez-vous la démarrer pour installer le serveur maintenant ?",
                 view=view,
             )
 
-    @tree.command(name="removeserver", description="Supprime un serveur Minecraft de la configuration")
+    @tree.command(
+        name="removeserver", description="Supprime un serveur Minecraft de la configuration"
+    )
     @app_commands.describe(server="Sélectionnez le serveur à supprimer")
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
@@ -782,7 +896,10 @@ def setup(tree: app_commands.CommandTree) -> None:
         guild_str = str(interaction.guild.id)
         config = load_config()
 
-        if guild_str not in config["guilds"] or server not in config["guilds"][guild_str]["servers"]:
+        if (
+            guild_str not in config["guilds"]
+            or server not in config["guilds"][guild_str]["servers"]
+        ):
             await interaction.response.send_message(
                 ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
@@ -797,7 +914,12 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         # Résoudre l'IP SSH si nécessaire
         from bot.ssh import get_instance_public_ip
-        from bot.minecraft_process import is_minecraft_process_running, stop_minecraft_server, MC_SERVER_USER
+        from bot.minecraft_process import (
+            is_minecraft_process_running,
+            stop_minecraft_server,
+            MC_SERVER_USER,
+        )
+
         if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
             try:
                 ssh_host = await asyncio.to_thread(get_instance_public_ip, instance_id, region)
@@ -808,7 +930,9 @@ def setup(tree: app_commands.CommandTree) -> None:
         java_running = False
         if ssh_host:
             try:
-                _, java_running = await asyncio.to_thread(is_minecraft_process_running, server, host=ssh_host)
+                _, java_running = await asyncio.to_thread(
+                    is_minecraft_process_running, server, host=ssh_host
+                )
             except Exception:
                 java_running = False
 
@@ -871,7 +995,10 @@ def setup(tree: app_commands.CommandTree) -> None:
         guild_str = str(interaction.guild.id)
         config = load_config()
 
-        if guild_str not in config["guilds"] or server not in config["guilds"][guild_str]["servers"]:
+        if (
+            guild_str not in config["guilds"]
+            or server not in config["guilds"][guild_str]["servers"]
+        ):
             await interaction.response.send_message(
                 ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
@@ -903,10 +1030,13 @@ def setup(tree: app_commands.CommandTree) -> None:
             save_config(config)
             display_name = server_data.get("name", server)
             await interaction.response.send_message(
-                f":white_check_mark: Serveur **{display_name}** (`{server}`) mis à jour :\n\n" + "\n".join(changes)
+                f":white_check_mark: Serveur **{display_name}** (`{server}`) mis à jour :\n\n"
+                + "\n".join(changes)
             )
         except Exception as e:
-            await interaction.response.send_message(f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True)
+            await interaction.response.send_message(
+                f":x: Erreur lors de la sauvegarde : {e}", ephemeral=True
+            )
 
     # ── Permissions ─────────────────────────────────────────────────────────
 
@@ -915,15 +1045,21 @@ def setup(tree: app_commands.CommandTree) -> None:
         command="Commande à configurer",
         role="Rôle Discord à autoriser",
     )
-    @app_commands.choices(command=[app_commands.Choice(name=c, value=c) for c in CONFIGURABLE_COMMANDS])
+    @app_commands.choices(
+        command=[app_commands.Choice(name=c, value=c) for c in CONFIGURABLE_COMMANDS]
+    )
     @require_guild
     @require_admin
-    async def setpermission_command(interaction: discord.Interaction, command: str, role: discord.Role):
+    async def setpermission_command(
+        interaction: discord.Interaction, command: str, role: discord.Role
+    ):
 
         guild_str = str(interaction.guild.id)
         config = load_config()
 
-        guild_data = config["guilds"].setdefault(guild_str, {"name": interaction.guild.name, "servers": {}})
+        guild_data = config["guilds"].setdefault(
+            guild_str, {"name": interaction.guild.name, "servers": {}}
+        )
         perms = guild_data.setdefault("permissions", {})
         cmd_perm = perms.setdefault(command, dict(DEFAULT_PERMISSIONS[command]))
 
@@ -939,9 +1075,14 @@ def setup(tree: app_commands.CommandTree) -> None:
         except Exception as e:
             await interaction.response.send_message(f":x: Erreur : {e}", ephemeral=True)
 
-    @tree.command(name="resetpermission", description="Remet les permissions d'une commande aux valeurs par défaut")
+    @tree.command(
+        name="resetpermission",
+        description="Remet les permissions d'une commande aux valeurs par défaut",
+    )
     @app_commands.describe(command="Commande à réinitialiser")
-    @app_commands.choices(command=[app_commands.Choice(name=c, value=c) for c in CONFIGURABLE_COMMANDS])
+    @app_commands.choices(
+        command=[app_commands.Choice(name=c, value=c) for c in CONFIGURABLE_COMMANDS]
+    )
     @require_guild
     @require_admin
     async def resetpermission_command(interaction: discord.Interaction, command: str):
@@ -962,7 +1103,9 @@ def setup(tree: app_commands.CommandTree) -> None:
         except Exception as e:
             await interaction.response.send_message(f":x: Erreur : {e}", ephemeral=True)
 
-    @tree.command(name="listpermissions", description="Affiche les permissions de toutes les commandes")
+    @tree.command(
+        name="listpermissions", description="Affiche les permissions de toutes les commandes"
+    )
     @require_guild
     @require_admin
     async def listpermissions_command(interaction: discord.Interaction):
@@ -970,7 +1113,9 @@ def setup(tree: app_commands.CommandTree) -> None:
         config = load_config()
         summary = get_full_permission_summary(interaction.guild.id, config)
 
-        configurables = [(cmd, data) for cmd, data in summary.items() if data["visibility"] == "configurable"]
+        configurables = [
+            (cmd, data) for cmd, data in summary.items() if data["visibility"] == "configurable"
+        ]
         admins = [(cmd, data) for cmd, data in summary.items() if data["visibility"] == "admin"]
         publics = [(cmd, data) for cmd, data in summary.items() if data["visibility"] == "public"]
 
@@ -999,17 +1144,22 @@ def setup(tree: app_commands.CommandTree) -> None:
 
     # ── Paramètres par défaut de la guild ────────────────────────────────────
 
-    @tree.command(name="setdefault", description="Définit un paramètre par défaut pour la guild (utilisé lors de /createserver)")
+    @tree.command(
+        name="setdefault",
+        description="Définit un paramètre par défaut pour la guild (utilisé lors de /createserver)",
+    )
     @app_commands.describe(
         parameter="Paramètre à définir",
         value="Valeur à affecter",
     )
-    @app_commands.choices(parameter=[
-        app_commands.Choice(name="ID d'instance EC2", value="instance_id"),
-        app_commands.Choice(name="Région AWS",        value="region"),
-        app_commands.Choice(name="Coût horaire ($)",  value="hourly_cost"),
-        app_commands.Choice(name="RAM maximale",      value="max_ram"),
-    ])
+    @app_commands.choices(
+        parameter=[
+            app_commands.Choice(name="ID d'instance EC2", value="instance_id"),
+            app_commands.Choice(name="Région AWS", value="region"),
+            app_commands.Choice(name="Coût horaire ($)", value="hourly_cost"),
+            app_commands.Choice(name="RAM maximale", value="max_ram"),
+        ]
+    )
     @require_guild
     @require_admin
     async def setdefault_command(interaction: discord.Interaction, parameter: str, value: str):
@@ -1029,7 +1179,10 @@ def setup(tree: app_commands.CommandTree) -> None:
             ephemeral=True,
         )
 
-    @tree.command(name="showdefaults", description="Affiche les paramètres par défaut configurés pour ce serveur Discord")
+    @tree.command(
+        name="showdefaults",
+        description="Affiche les paramètres par défaut configurés pour ce serveur Discord",
+    )
     @require_guild
     @require_admin
     async def showdefaults_command(interaction: discord.Interaction):
@@ -1087,7 +1240,9 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         return ops_to_add, whitelist_to_add, uuid_errors
 
-    @tree.command(name="properties", description="Modifie les propriétés d'un serveur Minecraft existant")
+    @tree.command(
+        name="properties", description="Modifie les propriétés d'un serveur Minecraft existant"
+    )
     @app_commands.describe(
         server="Sélectionnez le serveur à modifier",
         motd="Description affichée dans la liste de serveurs (motd)",
@@ -1097,11 +1252,13 @@ def setup(tree: app_commands.CommandTree) -> None:
         add_whitelist="Pseudos à ajouter à la whitelist (séparés par virgule)",
         icon_url="URL d'une image PNG 64×64 pour l'icône du serveur",
     )
-    @app_commands.choices(gamemode=[
-        app_commands.Choice(name="Survie", value="survival"),
-        app_commands.Choice(name="Créatif", value="creative"),
-        app_commands.Choice(name="Hardcore", value="hardcore"),
-    ])
+    @app_commands.choices(
+        gamemode=[
+            app_commands.Choice(name="Survie", value="survival"),
+            app_commands.Choice(name="Créatif", value="creative"),
+            app_commands.Choice(name="Hardcore", value="hardcore"),
+        ]
+    )
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
     @require_admin
@@ -1118,7 +1275,10 @@ def setup(tree: app_commands.CommandTree) -> None:
         guild_str = str(interaction.guild.id)
         config = load_config()
 
-        if guild_str not in config["guilds"] or server not in config["guilds"][guild_str]["servers"]:
+        if (
+            guild_str not in config["guilds"]
+            or server not in config["guilds"][guild_str]["servers"]
+        ):
             await interaction.response.send_message(
                 ":x: Serveur introuvable dans la configuration.", ephemeral=True
             )
@@ -1133,7 +1293,9 @@ def setup(tree: app_commands.CommandTree) -> None:
             state_label = f"**{instance_state}**" if instance_state else "**injoignable**"
 
             # Résoudre les UUIDs Mojang en avance pour les inclure dans la View
-            ops_to_add, whitelist_to_add, uuid_errors = await _resolve_uuid_lists(add_admin, add_whitelist)
+            ops_to_add, whitelist_to_add, uuid_errors = await _resolve_uuid_lists(
+                add_admin, add_whitelist
+            )
 
             display_name = server_data.get("name", server)
             view = _InstanceStartForPropertiesView(
@@ -1157,12 +1319,20 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         # Résoudre les UUIDs Mojang pour ops/whitelist
-        ops_to_add, whitelist_to_add, uuid_errors = await _resolve_uuid_lists(add_admin, add_whitelist)
+        ops_to_add, whitelist_to_add, uuid_errors = await _resolve_uuid_lists(
+            add_admin, add_whitelist
+        )
 
-        if uuid_errors and not motd and max_players is None and gamemode is None and not ops_to_add and not whitelist_to_add and not icon_url:
-            await interaction.response.send_message(
-                ":x: " + "\n".join(uuid_errors), ephemeral=True
-            )
+        if (
+            uuid_errors
+            and not motd
+            and max_players is None
+            and gamemode is None
+            and not ops_to_add
+            and not whitelist_to_add
+            and not icon_url
+        ):
+            await interaction.response.send_message(":x: " + "\n".join(uuid_errors), ephemeral=True)
             return
 
         await interaction.response.defer()
@@ -1194,7 +1364,9 @@ def setup(tree: app_commands.CommandTree) -> None:
 
     # ── Canal de notification ────────────────────────────────────────────────
 
-    @tree.command(name="setchannel", description="Définit le canal Discord pour les notifications du bot")
+    @tree.command(
+        name="setchannel", description="Définit le canal Discord pour les notifications du bot"
+    )
     @app_commands.describe(channel="Canal où envoyer les notifications (auto-stop, etc.)")
     @require_guild
     @require_admin
@@ -1261,10 +1433,16 @@ async def _run_ssh_setup(
 
     success, message = await asyncio.to_thread(
         setup_minecraft_server,
-        server_key, port, jar_url=jar_url,
-        motd=motd, max_players=max_players, gamemode=gamemode,
-        seed=seed, icon_url=icon_url,
-        server_type=server_type, bedrock_port=bedrock_port,
+        server_key,
+        port,
+        jar_url=jar_url,
+        motd=motd,
+        max_players=max_players,
+        gamemode=gamemode,
+        seed=seed,
+        icon_url=icon_url,
+        server_type=server_type,
+        bedrock_port=bedrock_port,
         viaversion_url=viaversion_url,
         mod_urls=mod_urls or None,
     )
@@ -1287,7 +1465,9 @@ async def _run_ssh_setup(
 
         if server_type == SERVER_TYPE_BEDROCK and bedrock_port:
             try:
-                await asyncio.to_thread(manage_sg_port, instance_id, region, bedrock_port, "authorize", "udp")
+                await asyncio.to_thread(
+                    manage_sg_port, instance_id, region, bedrock_port, "authorize", "udp"
+                )
             except Exception as e:
                 sg_info += f"\n:warning: Port Bedrock `{bedrock_port}/udp` non ouvert : {format_boto_error(e, action='ouvrir le port Bedrock', instance_id=instance_id, region=region)}"
 

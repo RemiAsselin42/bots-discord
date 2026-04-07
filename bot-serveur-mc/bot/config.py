@@ -64,6 +64,7 @@ def get_optimization_mods(config: dict) -> list[str]:
         { "optimization_mods": ["ferrite-core", "lithium"] }
     """
     from bot.fabric import OPTIMIZATION_MODS as _DEFAULT_MODS  # import local pour éviter les cycles
+
     return config.get("optimization_mods", _DEFAULT_MODS)
 
 

@@ -8,7 +8,12 @@ from bot.aws import format_boto_error, get_ec2_client
 from bot.config import get_server_config, load_config
 from bot.helpers import is_valid_instance_id, require_guild
 from bot.permissions import check_permission
-from bot.minecraft_process import check_other_mc_servers_running, is_minecraft_process_running, start_minecraft_process, stop_minecraft_server
+from bot.minecraft_process import (
+    check_other_mc_servers_running,
+    is_minecraft_process_running,
+    start_minecraft_process,
+    stop_minecraft_server,
+)
 from bot.ssh import get_instance_public_ip
 from bot.tasks import notify_restart_ready, notify_server_ready
 
@@ -83,7 +88,9 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
         except Exception as e:
             await interaction.response.send_message(
-                format_boto_error(e, action="démarrer le serveur", instance_id=instance_id, region=region),
+                format_boto_error(
+                    e, action="démarrer le serveur", instance_id=instance_id, region=region
+                ),
                 ephemeral=True,
             )
 
@@ -183,14 +190,19 @@ def setup(tree: app_commands.CommandTree) -> None:
                 await interaction.followup.send(
                     f":red_circle: Le serveur **{name}** a été arrêté.\n"
                     ":warning: Impossible d'arrêter l'instance EC2 : "
-                    + format_boto_error(e, action="arrêter l'instance", instance_id=instance_id, region=region)
+                    + format_boto_error(
+                        e, action="arrêter l'instance", instance_id=instance_id, region=region
+                    )
                 )
         else:
             await interaction.followup.send(
                 f":red_circle: Le serveur Minecraft **{name}** a été arrêté."
             )
 
-    @tree.command(name="restart", description="Redémarre le processus Java du serveur Minecraft sans toucher à l'instance EC2")
+    @tree.command(
+        name="restart",
+        description="Redémarre le processus Java du serveur Minecraft sans toucher à l'instance EC2",
+    )
     @app_commands.describe(server="Sélectionnez le serveur à redémarrer")
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
@@ -287,7 +299,9 @@ def setup(tree: app_commands.CommandTree) -> None:
             instance_state = await asyncio.to_thread(_get_instance_state, instance_id, region)
         except Exception as e:
             await interaction.response.send_message(
-                format_boto_error(e, action="vérifier le statut", instance_id=instance_id, region=region),
+                format_boto_error(
+                    e, action="vérifier le statut", instance_id=instance_id, region=region
+                ),
                 ephemeral=True,
             )
             return
@@ -304,7 +318,8 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         ssh_ok, java_running = await asyncio.to_thread(is_minecraft_process_running, server)
         java_status = (
-            ":green_circle: **en cours d'exécution**" if java_running
+            ":green_circle: **en cours d'exécution**"
+            if java_running
             else (":red_circle: **arrêté**" if ssh_ok else ":yellow_circle: **SSH injoignable**")
         )
         await interaction.followup.send(

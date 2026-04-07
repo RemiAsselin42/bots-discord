@@ -21,7 +21,9 @@ def get_instance_state(instance_id: str, region: str) -> str | None:
         return None
 
 
-def manage_sg_port(instance_id: str, region: str, port: int, action: str, protocol: str = "tcp") -> None:
+def manage_sg_port(
+    instance_id: str, region: str, port: int, action: str, protocol: str = "tcp"
+) -> None:
     """Ouvre ou ferme un port dans le Security Group de l'instance EC2.
 
     action: 'authorize' ou 'revoke'

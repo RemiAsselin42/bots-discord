@@ -36,7 +36,9 @@ async def version_autocomplete(
             _mc_versions_cache = data["versions"]
             _mc_versions_cache_time = time.monotonic()
         except Exception:
-            logger.warning("version_autocomplete : impossible de récupérer le manifeste Mojang", exc_info=True)
+            logger.warning(
+                "version_autocomplete : impossible de récupérer le manifeste Mojang", exc_info=True
+            )
             return []
 
     # Afficher les snapshots uniquement si l'input contient des lettres (ex: "24w", "pre", "rc")

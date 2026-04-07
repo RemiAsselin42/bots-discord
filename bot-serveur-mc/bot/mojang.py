@@ -1,6 +1,7 @@
 """
 Résolution des versions Minecraft et téléchargement de server.jar via l'API Mojang.
 """
+
 import re
 
 import aiohttp

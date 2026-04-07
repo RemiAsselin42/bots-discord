@@ -7,6 +7,7 @@ Stratégie :
 - On vérifie le chemin nominal (release connue, alias "latest") ainsi que
   les cas d'erreur (version inconnue, erreur réseau).
 """
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -67,6 +68,7 @@ VERSION_MANIFEST_SNAPSHOT = {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _make_resp(data: dict) -> MagicMock:
     """Crée un faux objet de réponse aiohttp (async context manager)."""
     resp = MagicMock()
@@ -99,6 +101,7 @@ def _make_session(responses: list[dict]) -> MagicMock:
 
 
 # ── Tests nominaux ────────────────────────────────────────────────────────────
+
 
 async def test_get_jar_url_for_known_version():
     """Résout correctement une version explicite (1.21.4)."""
@@ -142,6 +145,7 @@ async def test_get_jar_url_for_snapshot():
 
 # ── Tests d'erreur ────────────────────────────────────────────────────────────
 
+
 async def test_get_jar_url_raises_for_unknown_version():
     """Lève ValueError si la version n'existe pas dans le manifeste.
 
@@ -174,6 +178,7 @@ async def test_get_jar_url_raises_on_network_error():
 
 
 # ── Test : une seule session pour les deux requêtes ───────────────────────────
+
 
 async def test_single_session_used_for_both_requests():
     """Vérifie que get_jar_url_for_version réutilise la même session ClientSession."""

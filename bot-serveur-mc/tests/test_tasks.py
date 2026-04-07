@@ -7,6 +7,7 @@ Stratégie :
 - Les phases SSH et RCON (bot.ssh.*) sont mockées via patch + MagicMock/AsyncMock.
 - Le bot Discord est un MagicMock dont get_channel() retourne un canal fictif.
 """
+
 import asyncio
 import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -23,6 +24,7 @@ from bot.tasks import (
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_bot(channel_send: AsyncMock | None = None) -> MagicMock:
     bot = MagicMock()
@@ -45,6 +47,7 @@ def _ec2_state(state: str) -> MagicMock:
 
 
 # ── notify_server_ready ───────────────────────────────────────────────────────
+
 
 async def test_notify_sends_when_running():
     """Phase heureuse : EC2 running → SSH OK → MC démarré → RCON OK → message 'prêt'."""
@@ -104,7 +107,7 @@ async def test_notify_timeout_sends_warning():
             region="eu-north-1",
             server_key="survival",
             server_config={},
-            timeout=0,       # timeout immédiat
+            timeout=0,  # timeout immédiat
             poll_interval=0,
         )
 
@@ -190,6 +193,7 @@ async def test_notify_rcon_timeout_after_mc_started():
 
 # ── _check_and_stop_if_idle ───────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def clear_idle_tracker():
     """Remet le tracker d'inactivité à zéro avant chaque test."""
@@ -236,8 +240,10 @@ async def test_idle_timer_starts_on_zero_players():
     mc_server = MagicMock()
     mc_server.async_status = AsyncMock(return_value=mc_status)
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java:
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.JavaServer") as mock_java,
+    ):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,
@@ -266,8 +272,10 @@ async def test_idle_timer_resets_when_players_join():
     mc_server = MagicMock()
     mc_server.async_status = AsyncMock(return_value=mc_status)
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java:
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.JavaServer") as mock_java,
+    ):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,
@@ -301,9 +309,11 @@ async def test_auto_stop_triggered_after_timeout():
     async def fake_to_thread_autostop(fn, *args, **kwargs):
         return next(to_thread_results)
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java, \
-         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread_autostop):
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.JavaServer") as mock_java,
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread_autostop),
+    ):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,
@@ -336,9 +346,11 @@ async def test_auto_stop_no_notification_when_no_channel():
     async def fake_to_thread_autostop(fn, *args, **kwargs):
         return next(to_thread_results)
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java, \
-         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread_autostop):
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.JavaServer") as mock_java,
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread_autostop),
+    ):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,
@@ -371,6 +383,7 @@ async def test_idle_check_skipped_on_invalid_instance_id():
 
 # ── Logique zombie (MC injoignable) ──────────────────────────────────────────
 
+
 async def test_zombie_ssh_unreachable_instance_preserved():
     """Branche zombie 1 : SSH injoignable → is_minecraft_process_running retourne (False, False)
     → instance conservée (on ne sait pas si Java tourne)."""
@@ -384,9 +397,11 @@ async def test_zombie_ssh_unreachable_instance_preserved():
         # SSH injoignable : ssh_ok=False
         return (False, False)
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java, \
-         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread):
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.JavaServer") as mock_java,
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
+    ):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,
@@ -412,9 +427,11 @@ async def test_zombie_java_running_instance_preserved():
         # SSH ok, Java tourne encore
         return (True, True)
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java, \
-         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread):
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.JavaServer") as mock_java,
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
+    ):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,
@@ -447,9 +464,11 @@ async def test_zombie_other_servers_active_instance_preserved():
         # check_other_mc_servers_running : check réussi, autres serveurs actifs
         return (True, ["creative"])
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java, \
-         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread):
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.JavaServer") as mock_java,
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
+    ):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,
@@ -483,9 +502,11 @@ async def test_zombie_no_other_servers_instance_stopped():
         # check_other_mc_servers_running : check réussi, aucun autre serveur
         return (True, [])
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2), \
-         patch("bot.tasks.JavaServer") as mock_java, \
-         patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread):
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.JavaServer") as mock_java,
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
+    ):
         mock_java.lookup.return_value = mc_server
         await _check_and_stop_if_idle(
             bot=bot,

@@ -51,7 +51,9 @@ def setup(tree: app_commands.CommandTree) -> None:
                 host = _get_ec2_public_ip(instance_id, region)
             except Exception as e:
                 await interaction.followup.send(
-                    format_boto_error(e, action="récupérer l'IP", instance_id=instance_id, region=region),
+                    format_boto_error(
+                        e, action="récupérer l'IP", instance_id=instance_id, region=region
+                    ),
                     ephemeral=True,
                 )
                 return

@@ -5,7 +5,7 @@ import discord
 # Permissions par défaut si aucune config n'est définie pour la guild
 DEFAULT_PERMISSIONS: Final[dict[str, dict]] = {
     "start": {"admin_only": False, "allowed_roles": []},
-    "stop":  {"admin_only": True,  "allowed_roles": []},
+    "stop": {"admin_only": True, "allowed_roles": []},
 }
 
 # Commandes dont les permissions sont configurables par les admins
@@ -17,27 +17,27 @@ CONFIGURABLE_COMMANDS: Final[list[str]] = ["start", "stop"]
 # à CONFIGURABLE_COMMANDS ci-dessus.
 ALL_COMMANDS_VISIBILITY: Final[dict[str, str]] = {
     # Configurables (permission stockée en config)
-    "start":            "configurable",
-    "stop":             "configurable",
+    "start": "configurable",
+    "stop": "configurable",
     # Admin uniquement
-    "restart":          "admin",
-    "logs":             "admin",
-    "createserver":     "admin",
-    "removeserver":     "admin",
-    "editserver":       "admin",
-    "setpermission":    "admin",
-    "resetpermission":  "admin",
-    "listpermissions":  "admin",
-    "setdefault":       "admin",
-    "showdefaults":     "admin",
-    "properties":       "admin",
-    "setchannel":       "admin",
+    "restart": "admin",
+    "logs": "admin",
+    "createserver": "admin",
+    "removeserver": "admin",
+    "editserver": "admin",
+    "setpermission": "admin",
+    "resetpermission": "admin",
+    "listpermissions": "admin",
+    "setdefault": "admin",
+    "showdefaults": "admin",
+    "properties": "admin",
+    "setchannel": "admin",
     # Publiques
-    "list":             "public",
-    "ip":               "public",
-    "uptime":           "public",
-    "status":           "public",
-    "players":          "public",
+    "list": "public",
+    "ip": "public",
+    "uptime": "public",
+    "status": "public",
+    "players": "public",
 }
 
 # Assertion de cohérence : les commandes "configurable" dans ALL_COMMANDS_VISIBILITY
@@ -87,10 +87,7 @@ def get_permission_summary(guild_id: int, config: dict) -> dict[str, dict]:
     """Retourne les permissions effectives (config stockée + défauts)."""
     guild_str = str(guild_id)
     stored = config.get("guilds", {}).get(guild_str, {}).get("permissions", {})
-    return {
-        cmd: stored.get(cmd, DEFAULT_PERMISSIONS[cmd])
-        for cmd in CONFIGURABLE_COMMANDS
-    }
+    return {cmd: stored.get(cmd, DEFAULT_PERMISSIONS[cmd]) for cmd in CONFIGURABLE_COMMANDS}
 
 
 def get_full_permission_summary(guild_id: int, config: dict) -> dict[str, dict]:
@@ -100,7 +97,9 @@ def get_full_permission_summary(guild_id: int, config: dict) -> dict[str, dict]:
     result = {}
     for cmd, visibility in ALL_COMMANDS_VISIBILITY.items():
         if visibility == "configurable":
-            effective = stored.get(cmd, DEFAULT_PERMISSIONS.get(cmd, {"admin_only": False, "allowed_roles": []}))
+            effective = stored.get(
+                cmd, DEFAULT_PERMISSIONS.get(cmd, {"admin_only": False, "allowed_roles": []})
+            )
             result[cmd] = {"visibility": visibility, **effective}
         else:
             result[cmd] = {"visibility": visibility}

@@ -3,6 +3,7 @@ Tâches asyncio de fond :
 - notify_server_ready : poll EC2 après /start, met à jour DuckDNS, lance le Java MC, notifie.
 - auto_stop_loop      : surveille l'inactivité des serveurs et les arrête automatiquement.
 """
+
 import asyncio
 import datetime
 import logging
@@ -30,17 +31,18 @@ logger = logging.getLogger(__name__)
 # Tracker d'inactivité : {(guild_id_str, server_key) -> datetime de début d'inactivité | None}
 _idle_since: dict[tuple[str, str], datetime.datetime | None] = {}
 
-_NOTIFY_POLL_INTERVAL = 10   # secondes entre chaque check EC2 lors du démarrage
-_NOTIFY_TIMEOUT = 300        # 5 minutes max d'attente avant abandon
-_SSH_READY_RETRIES = 12      # tentatives max pour attendre que SSH soit dispo (12 × 5s = 60s)
-_SSH_READY_INTERVAL = 5      # secondes entre chaque tentative SSH
-_RCON_READY_RETRIES = 60     # tentatives max pour attendre que RCON soit dispo (60 × 10s = 600s)
-_RCON_READY_INTERVAL = 10    # secondes entre chaque tentative RCON
-_AUTO_STOP_INTERVAL = 300    # intervalle de la boucle auto-stop (5 minutes)
-_DEFAULT_IDLE_TIMEOUT = 30   # minutes d'inactivité avant arrêt automatique
+_NOTIFY_POLL_INTERVAL = 10  # secondes entre chaque check EC2 lors du démarrage
+_NOTIFY_TIMEOUT = 300  # 5 minutes max d'attente avant abandon
+_SSH_READY_RETRIES = 12  # tentatives max pour attendre que SSH soit dispo (12 × 5s = 60s)
+_SSH_READY_INTERVAL = 5  # secondes entre chaque tentative SSH
+_RCON_READY_RETRIES = 60  # tentatives max pour attendre que RCON soit dispo (60 × 10s = 600s)
+_RCON_READY_INTERVAL = 10  # secondes entre chaque tentative RCON
+_AUTO_STOP_INTERVAL = 300  # intervalle de la boucle auto-stop (5 minutes)
+_DEFAULT_IDLE_TIMEOUT = 30  # minutes d'inactivité avant arrêt automatique
 
 
 # ── Notification de démarrage ────────────────────────────────────────────────
+
 
 async def notify_server_ready(
     bot: discord.Client,
@@ -96,9 +98,7 @@ async def notify_server_ready(
     # Progression intermédiaire : EC2 prêt, SSH en attente
     channel = bot.get_channel(channel_id)
     if channel:
-        await channel.send(
-            f":hourglass: Le serveur **{server_name}** est en cours de démarrage. "
-        )
+        await channel.send(f":hourglass: Le serveur **{server_name}** est en cours de démarrage. ")
 
     # ── Phase 2 : mise à jour DuckDNS ───────────────────────────────────────
     duckdns_ok = True
@@ -118,13 +118,16 @@ async def notify_server_ready(
     ssh_ready = False
     if ssh_host and _key_path:
         for attempt in range(_SSH_READY_RETRIES):
-            ok, _ = await asyncio.to_thread(
-                ssh_execute, ssh_host, _user, _key_path, "echo ok", 10
-            )
+            ok, _ = await asyncio.to_thread(ssh_execute, ssh_host, _user, _key_path, "echo ok", 10)
             if ok:
                 ssh_ready = True
                 break
-            logger.debug("SSH pas encore prêt [%s] tentative %d/%d", server_name, attempt + 1, _SSH_READY_RETRIES)
+            logger.debug(
+                "SSH pas encore prêt [%s] tentative %d/%d",
+                server_name,
+                attempt + 1,
+                _SSH_READY_RETRIES,
+            )
             await asyncio.sleep(_SSH_READY_INTERVAL)
 
     # ── Phase 4 : lancer le processus Minecraft ─────────────────────────────
@@ -161,7 +164,9 @@ async def notify_server_ready(
                 process_exited_during_rcon = True
                 logger.error("Minecraft process exited during RCON checks [%s]", server_name)
                 break
-            logger.debug("RCON pas encore prêt [%s] tentative %d/%d", server_name, attempt + 1, rcon_retries)
+            logger.debug(
+                "RCON pas encore prêt [%s] tentative %d/%d", server_name, attempt + 1, rcon_retries
+            )
             await asyncio.sleep(rcon_interval)
 
     # ── Phase 5 : notifier dans Discord ─────────────────────────────────────
@@ -216,9 +221,7 @@ async def notify_restart_ready(
         if ok:
             channel = bot.get_channel(channel_id)
             if channel:
-                await channel.send(
-                    f":white_check_mark: Le serveur **{server_name}** est prêt !"
-                )
+                await channel.send(f":white_check_mark: Le serveur **{server_name}** est prêt !")
             return
 
     channel = bot.get_channel(channel_id)
@@ -229,6 +232,7 @@ async def notify_restart_ready(
 
 
 # ── Auto-stop ────────────────────────────────────────────────────────────────
+
 
 async def auto_stop_loop(bot: discord.Client) -> None:
     """
@@ -274,7 +278,9 @@ async def _check_and_stop_if_idle(
     # 1. Vérifier que l'instance est bien running
     try:
         ec2 = get_ec2_client(region)
-        statuses = ec2.describe_instance_status(InstanceIds=[instance_id]).get("InstanceStatuses", [])
+        statuses = ec2.describe_instance_status(InstanceIds=[instance_id]).get(
+            "InstanceStatuses", []
+        )
         if not statuses or statuses[0]["InstanceState"]["Name"] != "running":
             _idle_since.pop((guild_str, server_key), None)
             return
@@ -305,22 +311,35 @@ async def _check_and_stop_if_idle(
             _idle_since.pop((guild_str, server_key), None)
             return
         # SSH ok et Java arrêté → instance zombie : arrêter EC2 si aucun autre serveur actif
-        logger.info("Auto-stop [%s] : Java arrêté mais EC2 running (instance zombie), vérification des autres serveurs", name)
+        logger.info(
+            "Auto-stop [%s] : Java arrêté mais EC2 running (instance zombie), vérification des autres serveurs",
+            name,
+        )
         check_success, running_others = await asyncio.to_thread(
             check_other_mc_servers_running, server_key, host=ssh_host
         )
         if not check_success or running_others:
             _idle_since.pop((guild_str, server_key), None)
             if not check_success:
-                logger.warning("Auto-stop [%s] : instance zombie mais SSH injoignable pour check_other, instance conservée", name)
+                logger.warning(
+                    "Auto-stop [%s] : instance zombie mais SSH injoignable pour check_other, instance conservée",
+                    name,
+                )
             else:
-                logger.info("Auto-stop [%s] : instance zombie mais autres serveurs actifs (%s), instance conservée", name, ", ".join(running_others))
+                logger.info(
+                    "Auto-stop [%s] : instance zombie mais autres serveurs actifs (%s), instance conservée",
+                    name,
+                    ", ".join(running_others),
+                )
             return
         # Aucun autre serveur actif → arrêt de l'instance EC2
         try:
             ec2.stop_instances(InstanceIds=[instance_id])
             _idle_since.pop((guild_str, server_key), None)
-            logger.info("Auto-stop [%s] : instance zombie arrêtée (Java absent, aucun autre serveur actif)", name)
+            logger.info(
+                "Auto-stop [%s] : instance zombie arrêtée (Java absent, aucun autre serveur actif)",
+                name,
+            )
             if notification_channel_id:
                 channel = bot.get_channel(int(notification_channel_id))
                 if channel:
@@ -386,7 +405,8 @@ async def _check_and_stop_if_idle(
     if running_others:
         logger.info(
             "Auto-stop [%s] : MC arrêté mais instance conservée (autres actifs : %s)",
-            name, ", ".join(running_others),
+            name,
+            ", ".join(running_others),
         )
         _idle_since.pop(key, None)
         if notification_channel_id:
@@ -403,7 +423,9 @@ async def _check_and_stop_if_idle(
     try:
         ec2.stop_instances(InstanceIds=[instance_id])
         _idle_since.pop(key, None)
-        logger.info("Auto-stop [%s] : instance EC2 arrêtée après %.0f min d'inactivité", name, idle_minutes)
+        logger.info(
+            "Auto-stop [%s] : instance EC2 arrêtée après %.0f min d'inactivité", name, idle_minutes
+        )
 
         if notification_channel_id:
             channel = bot.get_channel(int(notification_channel_id))

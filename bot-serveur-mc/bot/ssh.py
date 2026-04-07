@@ -2,6 +2,7 @@
 Helper SSH pour la connexion aux instances EC2 Minecraft.
 Supporte les formats de clé RSA PEM et OpenSSH (ainsi que ECDSA, Ed25519, DSS).
 """
+
 import logging
 import os
 import secrets
@@ -69,9 +70,7 @@ def _resolve_host(host_override: str | None) -> str:
         return MC_SERVER_HOST
     if MC_SERVER_INSTANCE_ID:
         return get_instance_public_ip(MC_SERVER_INSTANCE_ID)
-    raise RuntimeError(
-        "Hôte SSH introuvable : définissez MC_SERVER_HOST ou MC_SERVER_INSTANCE_ID."
-    )
+    raise RuntimeError("Hôte SSH introuvable : définissez MC_SERVER_HOST ou MC_SERVER_INSTANCE_ID.")
 
 
 def ssh_execute(
@@ -141,4 +140,3 @@ async def update_duckdns(domain: str, token: str, ip: str) -> bool:
     except Exception as e:
         logger.error("Erreur mise à jour DuckDNS : %s", e)
         return False
-

@@ -15,7 +15,7 @@ def _format_bedrock_block(address: str, bedrock_port: int) -> str:
         f"\n**Bedrock :**\n"
         f"Adresse et Port : ```{address}```\n"
         f"```{bedrock_port}```"  # format souhaité pour que le port soit sur une ligne séparée, améliorant la lisibilité
-    ) 
+    )
 
 
 def setup(tree: app_commands.CommandTree) -> None:
@@ -31,8 +31,12 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
-        lines = "\n".join(f"• **{data.get('name', key)}** (`{key}`)" for key, data in servers.items())
-        await interaction.response.send_message(f":desktop: Serveurs Minecraft disponibles :\n\n{lines}")
+        lines = "\n".join(
+            f"• **{data.get('name', key)}** (`{key}`)" for key, data in servers.items()
+        )
+        await interaction.response.send_message(
+            f":desktop: Serveurs Minecraft disponibles :\n\n{lines}"
+        )
 
     @tree.command(name="ip", description="Obtient l'adresse IP ou le domaine du serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur")
@@ -66,7 +70,8 @@ def setup(tree: app_commands.CommandTree) -> None:
         instance_id = server_config.get("instance_id")
         if not is_valid_instance_id(instance_id):
             await interaction.response.send_message(
-                ":x: L'ID d'instance configuré est invalide. Impossible de récupérer l'IP.", ephemeral=True
+                ":x: L'ID d'instance configuré est invalide. Impossible de récupérer l'IP.",
+                ephemeral=True,
             )
             return
 
@@ -91,7 +96,9 @@ def setup(tree: app_commands.CommandTree) -> None:
 
             public_ip = instance.get("PublicIpAddress")
             if not public_ip:
-                await interaction.followup.send(f":x: Le serveur **{name}** n'a pas d'adresse IP publique.")
+                await interaction.followup.send(
+                    f":x: Le serveur **{name}** n'a pas d'adresse IP publique."
+                )
                 return
 
             bedrock_port = server_config.get("bedrock_port")
@@ -104,7 +111,12 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
         except Exception as e:
             await interaction.followup.send(
-                format_boto_error(e, action="récupérer l'IP du serveur", instance_id=instance_id, region=server_config.get("region")),
+                format_boto_error(
+                    e,
+                    action="récupérer l'IP du serveur",
+                    instance_id=instance_id,
+                    region=server_config.get("region"),
+                ),
                 ephemeral=True,
             )
 
@@ -136,11 +148,15 @@ def setup(tree: app_commands.CommandTree) -> None:
             data = get_uptime_and_cost(instance_id, region, hourly_cost)
 
             if data is None:
-                await interaction.response.send_message(f":white_circle: Le serveur **{name}** est **arrêté**.")
+                await interaction.response.send_message(
+                    f":white_circle: Le serveur **{name}** est **arrêté**."
+                )
                 return
 
             if not data["running"]:
-                await interaction.response.send_message(f":white_circle: Le serveur **{name}** est à l'état **{data['state']}**.")
+                await interaction.response.send_message(
+                    f":white_circle: Le serveur **{name}** est à l'état **{data['state']}**."
+                )
                 return
 
             await interaction.response.send_message(
@@ -153,6 +169,8 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
         except Exception as e:
             await interaction.response.send_message(
-                format_boto_error(e, action="vérifier l'uptime", instance_id=instance_id, region=region),
+                format_boto_error(
+                    e, action="vérifier l'uptime", instance_id=instance_id, region=region
+                ),
                 ephemeral=True,
             )

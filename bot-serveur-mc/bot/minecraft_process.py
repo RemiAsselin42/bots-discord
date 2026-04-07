@@ -2,6 +2,7 @@
 Gestion du cycle de vie du processus Minecraft sur l'instance EC2 :
 démarrage, arrêt, vérification RCON, setup de l'instance hôte et du serveur.
 """
+
 import logging
 import os
 import re
@@ -19,8 +20,7 @@ MC_SERVER_KEY_PATH = os.getenv("MC_SERVER_KEY_PATH", "")
 MC_MCRCON_PATH = os.getenv("MC_MCRCON_PATH", "/usr/local/bin/mcrcon")
 MC_SERVER_JAR_URL = os.getenv(
     "MC_SERVER_JAR_URL",
-    "https://piston-data.mojang.com/v1/objects/"
-    "59353fb40c36d304f2035d51e7d6e6baa98dc05c/server.jar",
+    "https://piston-data.mojang.com/v1/objects/59353fb40c36d304f2035d51e7d6e6baa98dc05c/server.jar",
 )
 
 
@@ -599,10 +599,7 @@ mkdir -p {mods_dir}
     success, output = ssh_execute(_host, _user, _key_path, command, timeout=timeout)
 
     if success:
-        return (
-            True,
-            f"Serveur `{server_key}` configuré\n"
-        )
+        return (True, f"Serveur `{server_key}` configuré\n")
     return (False, f":x: Erreur lors de la configuration:\n```\n{output}\n```")
 
 
@@ -661,7 +658,7 @@ def edit_minecraft_properties(
         escaped = value.replace("/", r"\/").replace("&", r"\&")
         return (
             f'if grep -q "^{key}=" "$PROPS"; then\n'
-            f'    sed -i \'s/^{key}=.*/{key}={escaped}/\' "$PROPS"\n'
+            f"    sed -i 's/^{key}=.*/{key}={escaped}/' \"$PROPS\"\n"
             f"else\n"
             f'    echo "{key}={value}" >> "$PROPS"\n'
             f"fi"
@@ -687,7 +684,7 @@ def edit_minecraft_properties(
             safe_uuid = uuid.replace("'", "")
             safe_name = name.replace("'", "")
             parts.append(
-                f"python3 -c \"\n"
+                f'python3 -c "\n'
                 f"import json, os\n"
                 f"path = '{server_dir}/ops.json'\n"
                 f"ops = json.load(open(path)) if os.path.exists(path) else []\n"
@@ -697,7 +694,7 @@ def edit_minecraft_properties(
                 f"    print('op ajouté : {safe_name}')\n"
                 f"else:\n"
                 f"    print('{safe_name} est déjà op')\n"
-                f"\""
+                f'"'
             )
             changes.append(f"• op ajouté: `{name}`")
 
@@ -709,7 +706,7 @@ def edit_minecraft_properties(
             safe_uuid = uuid.replace("'", "")
             safe_name = name.replace("'", "")
             parts.append(
-                f"python3 -c \"\n"
+                f'python3 -c "\n'
                 f"import json, os\n"
                 f"path = '{server_dir}/whitelist.json'\n"
                 f"wl = json.load(open(path)) if os.path.exists(path) else []\n"
@@ -719,7 +716,7 @@ def edit_minecraft_properties(
                 f"    print('whitelist ajouté : {safe_name}')\n"
                 f"else:\n"
                 f"    print('{safe_name} est déjà dans la whitelist')\n"
-                f"\""
+                f'"'
             )
             changes.append(f"• whitelist: `{name}`")
 

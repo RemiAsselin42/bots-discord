@@ -8,18 +8,10 @@ from bot.mojang import MAX_MC_VERSION, _parse_mc_version
 
 PAPER_API_BASE = "https://api.papermc.io/v2/projects/paper"
 
-GEYSER_SPIGOT_URL = (
-    "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
-)
-FLOODGATE_SPIGOT_URL = (
-    "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
-)
-HANGAR_VIAVERSION_LATEST_URL = (
-    "https://hangar.papermc.io/api/v1/projects/ViaVersion/latestrelease"
-)
-HANGAR_VIAVERSION_CDN_BASE = (
-    "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions"
-)
+GEYSER_SPIGOT_URL = "https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot"
+FLOODGATE_SPIGOT_URL = "https://download.geysermc.org/v2/projects/floodgate/versions/latest/builds/latest/downloads/spigot"
+HANGAR_VIAVERSION_LATEST_URL = "https://hangar.papermc.io/api/v1/projects/ViaVersion/latestrelease"
+HANGAR_VIAVERSION_CDN_BASE = "https://hangarcdn.papermc.io/plugins/ViaVersion/ViaVersion/versions"
 
 
 async def get_viaversion_jar_url() -> str:
@@ -77,4 +69,7 @@ async def get_paper_jar_url(version_id: str) -> tuple[str, str]:
 
         filename = build_data["downloads"]["application"]["name"]
 
-    return f"{PAPER_API_BASE}/versions/{version_id}/builds/{latest_build}/downloads/{filename}", version_id
+    return (
+        f"{PAPER_API_BASE}/versions/{version_id}/builds/{latest_build}/downloads/{filename}",
+        version_id,
+    )

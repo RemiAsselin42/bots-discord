@@ -22,10 +22,10 @@ def _fetch_logs(ssh_host: str, server_key: str, n_lines: int) -> tuple[bool, str
     command = (
         f'if [ -f "{base}/logs/latest.log" ]; then '
         f'  tail -n {n_lines} "{base}/logs/latest.log"; '
-        f'else '
+        f"else "
         f'  tail -n {n_lines} "{base}/stdout.log" 2>/dev/null '
         f'    || echo "(aucun fichier de log trouvé)"; '
-        f'fi'
+        f"fi"
     )
     return ssh_execute(ssh_host, MC_SERVER_USER, MC_SERVER_KEY_PATH, command)
 
@@ -63,7 +63,10 @@ def _split_for_discord(header: str, content: str) -> list[str]:
 
 def setup(tree: app_commands.CommandTree) -> None:
 
-    @tree.command(name="logs", description="Affiche les dernières lignes de logs de la console du serveur Minecraft")
+    @tree.command(
+        name="logs",
+        description="Affiche les dernières lignes de logs de la console du serveur Minecraft",
+    )
     @app_commands.describe(
         server="Sélectionnez le serveur",
         number="Nombre de lignes à afficher (max 100)",
@@ -107,9 +110,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         await interaction.response.defer()
 
-        success, output = await asyncio.to_thread(
-            _fetch_logs, resolved_host, server_key, n_lines
-        )
+        success, output = await asyncio.to_thread(_fetch_logs, resolved_host, server_key, n_lines)
 
         if not success:
             await interaction.followup.send(

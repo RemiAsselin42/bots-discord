@@ -41,6 +41,7 @@ SAMPLE_CONFIG = {
 
 # ── format_boto_error ────────────────────────────────────────────────────────
 
+
 def test_format_boto_error_no_credentials():
     from botocore.exceptions import NoCredentialsError
 
@@ -84,6 +85,7 @@ def test_format_boto_error_incorrect_state():
 
 
 # ── config helpers ───────────────────────────────────────────────────────────
+
 
 def test_get_guild_servers_returns_servers():
     result = get_guild_servers(123456789, SAMPLE_CONFIG)
@@ -130,6 +132,7 @@ def test_load_and_save_config_roundtrip():
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+
 def test_instance_id_validation_valid():
     assert is_valid_instance_id("i-0123456789abcdef0") is True
     assert is_valid_instance_id("i-abc123def456789ab") is True
@@ -169,7 +172,7 @@ def _make_interaction(is_admin: bool, role_ids: list[int] | None = None) -> Magi
     interaction.guild = MagicMock()
     interaction.user.guild_permissions.administrator = is_admin
     roles = []
-    for rid in (role_ids or []):
+    for rid in role_ids or []:
         r = MagicMock()
         r.id = rid
         roles.append(r)
@@ -199,9 +202,7 @@ def test_permission_allowed_role_grants_access():
             "123456789": {
                 "name": "Test",
                 "servers": {},
-                "permissions": {
-                    "stop": {"admin_only": True, "allowed_roles": [str(role_id)]}
-                },
+                "permissions": {"stop": {"admin_only": True, "allowed_roles": [str(role_id)]}},
             }
         }
     }
@@ -216,9 +217,7 @@ def test_permission_wrong_role_denied():
             "123456789": {
                 "name": "Test",
                 "servers": {},
-                "permissions": {
-                    "stop": {"admin_only": True, "allowed_roles": ["111"]}
-                },
+                "permissions": {"stop": {"admin_only": True, "allowed_roles": ["111"]}},
             }
         }
     }
@@ -234,6 +233,7 @@ def test_get_permission_summary_uses_defaults_when_no_config():
 
 
 # ── port_manager ─────────────────────────────────────────────────────────────
+
 
 def _config_with_ports(java_ports: list[int], bedrock_ports: list[int]) -> dict:
     """Construit une config avec des serveurs occupant les ports donnés."""

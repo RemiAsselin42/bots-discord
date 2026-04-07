@@ -56,7 +56,9 @@ def assign_port(config: dict, guild_id: int, instance_id: str | None = None) -> 
     return port
 
 
-def get_available_bedrock_port(config: dict, guild_id: int, instance_id: str | None = None) -> int | None:
+def get_available_bedrock_port(
+    config: dict, guild_id: int, instance_id: str | None = None
+) -> int | None:
     """
     Retourne le premier port Bedrock (UDP) disponible dans la plage 19132-19200.
 
