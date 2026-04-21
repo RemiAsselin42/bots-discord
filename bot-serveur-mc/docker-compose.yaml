@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     volumes:
       - ../keys/mc-host.pem:/keys/mc-host.pem:ro
+      - ./servers_config.json:/app/servers_config.json
     working_dir: /app
     # -u pour des logs non bufferisés
     command: python -u main.py
