@@ -63,7 +63,7 @@ def _format_properties(raw: str) -> str:
             )
             label = f"{len(players)} joueur(s)"
         except (ValueError, AttributeError):
-            players, label = [], "absent" if not block.strip() else "illisible"
+            players, label = [], "absent ou vide" if not block.strip() else "illisible"
         lines += ["", f"[{title}] {label}", *players]
     return "\n".join(lines)
 

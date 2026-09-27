@@ -89,4 +89,4 @@ def test_format_properties_masks_secrets_and_lists_players():
     assert "hunter2" not in out and "rcon.password=********" in out
     assert "motd=Salut" in out and "#Minecraft" not in out
     assert "[whitelist.json] 2 joueur(s)\nAlice\nbob" in out
-    assert out.endswith("[ops.json] absent")
+    assert out.endswith("[ops.json] absent ou vide")
