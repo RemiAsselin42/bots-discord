@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import discord
 from discord import app_commands
@@ -28,6 +29,43 @@ def _fetch_logs(ssh_host: str, server_key: str, n_lines: int) -> tuple[bool, str
         f"fi"
     )
     return ssh_execute(ssh_host, MC_SERVER_USER, MC_SERVER_KEY_PATH, command)
+
+
+_FILE_SEP = "@@@FILE@@@"
+
+
+def _fetch_properties(ssh_host: str, server_key: str) -> tuple[bool, str]:
+    """Lit server.properties, whitelist.json et ops.json (séparés par _FILE_SEP)."""
+    base = f"/home/{MC_SERVER_USER}/minecraft-servers/{server_key}"
+    command = (
+        f'cd "{base}" && cat server.properties'
+        f' && echo "{_FILE_SEP}" && (cat whitelist.json 2>/dev/null || true)'
+        f' && echo "{_FILE_SEP}" && (cat ops.json 2>/dev/null || true)'
+    )
+    return ssh_execute(ssh_host, MC_SERVER_USER, MC_SERVER_KEY_PATH, command)
+
+
+def _format_properties(raw: str) -> str:
+    """Met en forme la sortie de _fetch_properties, secrets masqués, un joueur par ligne."""
+    props, whitelist, ops = (raw.split(_FILE_SEP) + ["", ""])[:3]
+    lines = []
+    for line in props.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key = line.split("=", 1)[0]
+        lines.append(f"{key}=********" if "password" in key or "secret" in key else line)
+
+    for title, block in (("whitelist.json", whitelist), ("ops.json", ops)):
+        try:
+            players = sorted(
+                (e.get("name") or e.get("uuid", "?") for e in json.loads(block)), key=str.lower
+            )
+            label = f"{len(players)} joueur(s)"
+        except (ValueError, AttributeError):
+            players, label = [], "absent" if not block.strip() else "illisible"
+        lines += ["", f"[{title}] {label}", *players]
+    return "\n".join(lines)
 
 
 async def _resolve_server_host(
@@ -136,3 +174,31 @@ def setup(tree: app_commands.CommandTree) -> None:
         if isinstance(interaction.channel, discord.abc.Messageable):
             for page in messages[1:]:
                 await interaction.channel.send(page)
+
+    @tree.command(
+        name="list-properties",
+        description="Affiche (en privé) les propriétés, la whitelist et les ops d'un serveur",
+    )
+    @app_commands.describe(server="Sélectionnez le serveur")
+    @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
+    @require_admin
+    async def list_properties_command(interaction: discord.Interaction, server: str):
+        resolved = await _resolve_server_host(interaction, server)
+        if not resolved:
+            return
+        name, resolved_host = resolved
+
+        await interaction.response.defer(ephemeral=True)
+
+        success, output = await asyncio.to_thread(_fetch_properties, resolved_host, server)
+        if not success:
+            await interaction.followup.send(
+                f":x: Impossible de lire les propriétés de **{name}** :\n```\n{output[:1800]}\n```",
+                ephemeral=True,
+            )
+            return
+
+        header = f":gear: **Propriétés de {name}**"
+        for page in _split_for_discord(header, _format_properties(output)):
+            await interaction.followup.send(page, ephemeral=True)

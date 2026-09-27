@@ -1,4 +1,4 @@
-"""Exécute le script de durcissement whitelist sur un faux dossier serveur (bash requis)."""
+"""Whitelist : durcissement au démarrage (bash requis) et affichage /list-properties."""
 
 import json
 import os
@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from bot.commands.logs import _FILE_SEP, _format_properties
 from bot.minecraft_process import _WHITELIST_HARDENING, whitelist_notice
 
 BASH = shutil.which("bash")
@@ -62,3 +63,18 @@ def test_migration_keeps_data_and_is_idempotent(tmp_path: Path):
     (tmp_path / "whitelist.json").write_text(json.dumps(whitelist[:1]))
     assert whitelist_notice(_run(tmp_path)) == ""
     assert json.loads((tmp_path / "whitelist.json").read_text()) == whitelist[:1]
+
+
+def test_format_properties_masks_secrets_and_lists_players():
+    raw = _FILE_SEP.join(
+        [
+            "#Minecraft server properties\nmotd=Salut\nrcon.password=hunter2\nwhite-list=true\n",
+            json.dumps([{"uuid": BOB, "name": "bob"}, {"uuid": ALICE, "name": "Alice"}]),
+            "",
+        ]
+    )
+    out = _format_properties(raw)
+    assert "hunter2" not in out and "rcon.password=********" in out
+    assert "motd=Salut" in out and "#Minecraft" not in out
+    assert "[whitelist.json] 2 joueur(s)\nAlice\nbob" in out
+    assert out.endswith("[ops.json] absent")

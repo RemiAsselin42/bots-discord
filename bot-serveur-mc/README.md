@@ -46,6 +46,7 @@ Bot Discord pour gérer plusieurs serveurs Minecraft EC2 sur AWS avec autocompl�
 | `/removeserver [serveur]`       | Supprime un serveur de la configuration (avec option de supprimer les fichiers sur l'instance) |
 | `/editserver [serveur]`         | Modifie la configuration d'un serveur existant                                            |
 | `/properties [serveur]`         | Modifie les propriétés du serveur (motd, max_players, ops, whitelist, icône)             |
+| `/list-properties [serveur]`    | Affiche en privé `server.properties` (secrets masqués), la whitelist et les ops           |
 | `/logs [serveur] [number]`      | Affiche les dernières lignes de logs de la console (max 100 lignes)                      |
 | `/setchannel [canal]`           | Définit le canal de notifications (auto-stop, etc.)                                       |
 | `/setpermission [cmd] [rôle]`   | Autorise un rôle Discord à utiliser `/start` ou `/stop`                                  |
@@ -131,7 +132,7 @@ bot-serveur-mc/
 │   │   ├── control.py          # /start, /stop, /restart, /status
 │   │   ├── info.py             # /list, /ip, /uptime
 │   │   ├── stats.py            # /players
-│   │   ├── logs.py             # /logs (récupération via SSH)
+│   │   ├── logs.py             # /logs, /list-properties (lecture via SSH)
 │   │   ├── admin.py            # /createserver, /removeserver, /editserver,
 │   │   │                       # /properties, /setchannel, /setpermission,
 │   │   │                       # /resetpermission, /listpermissions,
