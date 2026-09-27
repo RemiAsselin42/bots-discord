@@ -66,6 +66,7 @@ Ce script :
 2. Reconstruit et redémarre `bot-gepetesque` (conteneur : `gepetesque`)
 3. Reconstruit et redémarre `bot-serveur-mc` (conteneur : `serveur-mc`)
 4. Affiche l'état de tous les conteneurs Docker
+5. Supprime les images orphelines et le cache de build Docker, même si un build échoue (les volumes ne sont jamais touchés)
 
 > **Note :** Le script utilise `--remove-orphans` pour nettoyer les conteneurs obsolètes après renommage.
 

@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# Chaque rebuild laisse l'ancienne image orpheline : on nettoie en sortie, même si un build
+# échoue, pour ne pas saturer le disque de l'hôte (images et cache seulement, jamais les volumes).
+trap 'echo ""; echo "==> Nettoyage Docker..."; docker image prune -f; docker builder prune -f' EXIT
+
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "==> Pull des mises à jour Git..."
