@@ -23,6 +23,69 @@ MC_SERVER_JAR_URL = os.getenv(
     "https://piston-data.mojang.com/v1/objects/59353fb40c36d304f2035d51e7d6e6baa98dc05c/server.jar",
 )
 
+# Préfixe des lignes de sortie à relayer dans Discord (migration whitelist).
+WHITELIST_NOTICE = ":lock:"
+
+# Exécuté dans le dossier du serveur avant chaque lancement de Java : whitelist obligatoire.
+# Ne touche qu'à white-list / enforce-whitelist et complète whitelist.json : monde, ops et
+# autres propriétés restent intacts. Premier passage sur un serveur ouvert (white-list pas
+# encore à true) : les joueurs ayant déjà joué (playerdata) sont autorisés pour ne verrouiller
+# personne, les admins retirent les intrus via /properties remove_whitelist.
+# Un whitelist.json illisible fait échouer le démarrage plutôt que d'être écrasé.
+_WHITELIST_HARDENING = f"""
+touch server.properties
+if ! grep -q '^white-list=true$' server.properties; then
+    python3 - <<'PYEOF'
+import json, os
+
+def read_json(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
+
+props = dict(
+    line.strip().split("=", 1)
+    for line in open("server.properties", encoding="utf-8")
+    if "=" in line and not line.startswith("#")
+)
+playerdata = os.path.join(props.get("level-name") or "world", "playerdata")
+try:
+    names = {{e.get("uuid"): e.get("name") for e in read_json("usercache.json")}}
+except ValueError:
+    names = {{}}
+whitelist = read_json("whitelist.json")
+known = {{e.get("uuid") for e in whitelist}}
+added = []
+for f in sorted(os.listdir(playerdata)) if os.path.isdir(playerdata) else []:
+    uuid = f[: -len(".dat")]
+    if f.endswith(".dat") and uuid not in known:
+        name = names.get(uuid) or uuid
+        whitelist.append({{"uuid": uuid, "name": name}})
+        known.add(uuid)
+        added.append(name)
+with open("whitelist.json.tmp", "w", encoding="utf-8") as f:
+    json.dump(whitelist, f, indent=2)
+os.replace("whitelist.json.tmp", "whitelist.json")
+shown = ", ".join(added[:40]) + (f" (+{{len(added) - 40}})" if len(added) > 40 else "")
+print("{WHITELIST_NOTICE} Whitelist activée. Joueurs existants autorisés : " + (shown or "aucun"))
+PYEOF
+fi
+for key in white-list enforce-whitelist; do
+    if grep -q "^$key=" server.properties; then
+        sed -i "s/^$key=.*/$key=true/" server.properties
+    else
+        echo "$key=true" >> server.properties
+    fi
+done
+"""
+
+
+def whitelist_notice(output: str) -> str:
+    """Extrait de la sortie de start_minecraft_process les lignes à relayer dans Discord."""
+    return "".join(f"\n{line}" for line in output.splitlines() if line.startswith(WHITELIST_NOTICE))
+
 
 def start_minecraft_process(
     server_key: str,
@@ -98,7 +161,7 @@ if [ ! -f eula.txt ] || ! grep -q '^eula=true$' eula.txt; then
         echo 'eula=true' > eula.txt
     fi
 fi
-
+{_WHITELIST_HARDENING}
 setsid nohup java -Xmx{max_ram} -Xms{min_ram} -jar "$JAR_PATH" nogui < /dev/null > stdout.log 2>&1 &
 # Attendre jusqu'à 90s que Java soit détecté par pgrep.
 # On se base uniquement sur pgrep (pas sur $! qui pointe le wrapper setsid/nohup, pas Java).

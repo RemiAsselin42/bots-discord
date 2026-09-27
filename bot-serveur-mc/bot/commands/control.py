@@ -12,6 +12,7 @@ from bot.minecraft_process import (
     is_minecraft_process_running,
     start_minecraft_process,
     stop_minecraft_server,
+    whitelist_notice,
 )
 from bot.permissions import check_permission
 from bot.ssh import get_instance_public_ip
@@ -266,6 +267,7 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         await interaction.followup.send(
             f":arrows_counterclockwise: Le serveur **{name}** redémarre… Je vous notifie dès qu'il est prêt !"
+            + whitelist_notice(output)
         )
 
         restart_channel_id = interaction.channel_id

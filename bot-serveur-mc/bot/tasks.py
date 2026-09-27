@@ -23,6 +23,7 @@ from bot.minecraft_process import (
     is_minecraft_process_running,
     start_minecraft_process,
     stop_minecraft_server,
+    whitelist_notice,
 )
 from bot.ssh import get_instance_public_ip, ssh_execute, update_duckdns
 
@@ -133,6 +134,7 @@ async def notify_server_ready(
     # ── Phase 4 : lancer le processus Minecraft ─────────────────────────────
     mc_started = False
     mc_error = ""
+    mc_notice = ""
     if ssh_ready:
         mc_started, mc_output = await asyncio.to_thread(
             start_minecraft_process,
@@ -141,6 +143,9 @@ async def notify_server_ready(
             min_ram=server_config.get("min_ram", "1024M"),
             host=ssh_host,
         )
+        mc_notice = whitelist_notice(mc_output)
+        if mc_notice:
+            logger.info("Whitelist [%s] :%s", server_name, mc_notice)
         if not mc_started:
             mc_error = mc_output
             logger.error("Démarrage Minecraft [%s] échoué : %s", server_name, mc_output)
@@ -175,9 +180,9 @@ async def notify_server_ready(
         return
 
     if rcon_ready:
-        extra = ""
+        extra = mc_notice
         if not duckdns_ok:
-            extra = "\n:warning: La mise à jour DuckDNS a échoué : vérifiez le token/domaine."
+            extra += "\n:warning: La mise à jour DuckDNS a échoué : vérifiez le token/domaine."
         await channel.send(
             f":white_check_mark: Le serveur **{server_name}** est prêt ! Utilisez `/ip` pour obtenir l'adresse.{extra}"
         )

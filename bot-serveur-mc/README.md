@@ -325,6 +325,9 @@ La clé SSH est montée en lecture seule depuis `../keys/mc-host.pem` (partagé 
 
 ## Sécurité
 
+- **Whitelist obligatoire** : à chaque lancement de Java (`/start`, `/restart`), le bot force `white-list=true` et `enforce-whitelist=true` dans `server.properties`. Seules ces deux clés sont modifiées : monde, `ops.json` et autres propriétés restent intacts. Les ops passent toujours.
+- **Migration des serveurs existants** : au premier lancement d'un serveur encore ouvert, les joueurs ayant déjà joué (`<monde>/playerdata`, pseudos via `usercache.json`) sont ajoutés à `whitelist.json` (fusion, jamais d'écrasement) et listés dans le message « prêt » sur Discord. Retirez les intrus avec `/properties remove_whitelist`.
+- Le port RCON (`port + 10`) n'est jamais ouvert par le bot dans le Security Group : ne l'ouvrez pas à la main.
 - Ne partagez jamais votre fichier `.env`
 - Utilisez des rôles IAM AWS avec permissions minimales : `ec2:StartInstances`, `ec2:StopInstances`, `ec2:DescribeInstances`, `ec2:DescribeInstanceStatus`
 - La clé SSH PEM ne doit pas être commitée — elle est montée via un volume Docker
