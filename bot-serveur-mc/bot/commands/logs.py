@@ -30,6 +30,41 @@ def _fetch_logs(ssh_host: str, server_key: str, n_lines: int) -> tuple[bool, str
     return ssh_execute(ssh_host, MC_SERVER_USER, MC_SERVER_KEY_PATH, command)
 
 
+async def _resolve_server_host(
+    interaction: discord.Interaction, server_key: str
+) -> tuple[str, str] | None:
+    """Retourne (nom affiché, hôte SSH) du serveur, ou répond en privé et retourne None."""
+    assert interaction.guild is not None
+    server_config = get_server_config(interaction.guild.id, server_key, load_config())
+    if not server_config:
+        await interaction.response.send_message(
+            ":x: Serveur introuvable dans la configuration.", ephemeral=True
+        )
+        return None
+
+    name = server_config.get("name", server_key)
+    instance_id = server_config.get("instance_id")
+    region = server_config.get("region", "eu-north-1")
+    ssh_host = server_config.get("ssh_host") or None
+
+    if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
+        try:
+            ssh_host = await asyncio.to_thread(get_instance_public_ip, instance_id, region)
+        except Exception:
+            await interaction.response.send_message(
+                f":x: Impossible de résoudre l'hôte SSH pour **{name}** "
+                "(l'instance est peut-être arrêtée).",
+                ephemeral=True,
+            )
+            return None
+
+    try:
+        return name, _resolve_host(ssh_host)
+    except RuntimeError as e:
+        await interaction.response.send_message(f":x: {e}", ephemeral=True)
+        return None
+
+
 def _split_for_discord(header: str, content: str) -> list[str]:
     """Découpe le contenu en messages Discord de max 2000 caractères.
 
@@ -75,39 +110,13 @@ def setup(tree: app_commands.CommandTree) -> None:
     @require_guild
     @require_admin
     async def logs_command(interaction: discord.Interaction, server: str, number: int = 25):
-        assert interaction.guild is not None
-
         n_lines = max(1, min(number, MAX_LINES))
 
         server_key = server
-        server_config = get_server_config(interaction.guild.id, server_key, load_config())
-        if not server_config:
-            await interaction.response.send_message(
-                ":x: Serveur introuvable dans la configuration.", ephemeral=True
-            )
+        resolved = await _resolve_server_host(interaction, server_key)
+        if not resolved:
             return
-
-        name = server_config.get("name", server_key)
-        instance_id = server_config.get("instance_id")
-        region = server_config.get("region", "eu-north-1")
-        ssh_host = server_config.get("ssh_host") or None
-
-        if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
-            try:
-                ssh_host = await asyncio.to_thread(get_instance_public_ip, instance_id, region)
-            except Exception:
-                await interaction.response.send_message(
-                    f":x: Impossible de résoudre l'hôte SSH pour **{name}** "
-                    "(l'instance est peut-être arrêtée).",
-                    ephemeral=True,
-                )
-                return
-
-        try:
-            resolved_host = _resolve_host(ssh_host)
-        except RuntimeError as e:
-            await interaction.response.send_message(f":x: {e}", ephemeral=True)
-            return
+        name, resolved_host = resolved
 
         await interaction.response.defer()
 
