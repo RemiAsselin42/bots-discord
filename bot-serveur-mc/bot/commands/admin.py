@@ -1454,7 +1454,7 @@ async def _run_ssh_setup(
         extra = ""
         if duckdns_domain:
             full_domain = resolve_duckdns_host(duckdns_domain)
-            extra = rf"\**Adresse IP :** `{full_domain}:{port}`"
+            extra = f"\nAdresse IP : `{full_domain}:{port}`"
             if server_type == SERVER_TYPE_BEDROCK and bedrock_port:
                 extra += f"\nBedrock: `{full_domain}:{bedrock_port}` (UDP)"
 
