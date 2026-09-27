@@ -620,6 +620,7 @@ def edit_minecraft_properties(
     gamemode: str | None = None,
     ops_to_add: list[tuple[str, str]] | None = None,
     whitelist_to_add: list[tuple[str, str]] | None = None,
+    whitelist_to_remove: list[str] | None = None,
     icon_url: str | None = None,
     host: str | None = None,
     user: str | None = None,
@@ -632,6 +633,7 @@ def edit_minecraft_properties(
 
     gamemode : "survival" | "creative" | "hardcore"
     ops_to_add / whitelist_to_add : liste de (uuid, name)
+    whitelist_to_remove : liste de pseudos (insensible à la casse)
 
     Returns:
         (success, message)
@@ -719,6 +721,32 @@ def edit_minecraft_properties(
                 f'"'
             )
             changes.append(f"• whitelist: `{name}`")
+
+    if whitelist_to_remove:
+        names = [re.sub(r"[^\w. ]", "", n).lower() for n in whitelist_to_remove]
+        parts.append(
+            "python3 - <<'PYEOF'\n"
+            "import json\n"
+            f"path = '{server_dir}/whitelist.json'\n"
+            f"names = {names!r}\n"
+            "wl = json.load(open(path))\n"
+            "kept = [e for e in wl if e.get('name', '').lower() not in names]\n"
+            "json.dump(kept, open(path, 'w'), indent=2)\n"
+            "print(str(len(wl) - len(kept)) + ' joueur(s) retiré(s) de la whitelist')\n"
+            "PYEOF"
+        )
+        changes.extend(f"• retiré de la whitelist: `{name}`" for name in whitelist_to_remove)
+
+    # Un serveur lancé ne relit whitelist.json qu'au démarrage : on le recharge à chaud.
+    # (pas de « whitelist on » : il réécrirait server.properties depuis la mémoire du serveur)
+    if whitelist_to_add or whitelist_to_remove:
+        parts.append(
+            f"if pgrep -f '[j]ava .*/minecraft-servers/{server_key}/server.jar' > /dev/null 2>&1; then\n"
+            "    RCON_PORT=$(grep '^rcon.port=' \"$PROPS\" | cut -d= -f2)\n"
+            "    RCON_PASS=$(grep '^rcon.password=' \"$PROPS\" | cut -d= -f2)\n"
+            f'    "{MC_MCRCON_PATH}" -H 127.0.0.1 -P "$RCON_PORT" -p "$RCON_PASS" "whitelist reload" || true\n'
+            "fi"
+        )
 
     # --- server-icon.png ---
     if icon_url:

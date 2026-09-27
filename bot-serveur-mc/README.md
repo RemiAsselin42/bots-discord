@@ -240,7 +240,10 @@ Permet de modifier à chaud les propriétés d'un serveur existant :
 - `motd`, `max_players`, `gamemode` (nécessitent un `/restart` pour être appliqués)
 - `add_admin` : promeut un joueur opérateur (résolution UUID via API Mojang)
 - `add_whitelist` : ajoute des joueurs à la whitelist (virgule-séparés, résolution UUID)
+- `remove_whitelist` : retire des joueurs de la whitelist (virgule-séparés)
 - `icon_url` : définit l'icône du serveur
+
+Les changements de whitelist sont rechargés à chaud via RCON (`whitelist reload`) si le serveur tourne.
 
 Si l'instance est arrêtée, le bot propose de la démarrer avant la modification.
 

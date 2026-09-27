@@ -45,6 +45,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
         gamemode: str | None,
         ops_to_add: list[tuple[str, str]],
         whitelist_to_add: list[tuple[str, str]],
+        whitelist_to_remove: list[str],
         icon_url: str | None,
         uuid_errors: list[str],
     ) -> None:
@@ -58,6 +59,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
         self._gamemode = gamemode
         self._ops_to_add = ops_to_add
         self._whitelist_to_add = whitelist_to_add
+        self._whitelist_to_remove = whitelist_to_remove
         self._icon_url = icon_url
         self._uuid_errors = uuid_errors
 
@@ -134,6 +136,7 @@ class _InstanceStartForPropertiesView(discord.ui.View):
             gamemode=self._gamemode,
             ops_to_add=self._ops_to_add or None,
             whitelist_to_add=self._whitelist_to_add or None,
+            whitelist_to_remove=self._whitelist_to_remove or None,
             icon_url=self._icon_url,
         )
 
@@ -1256,6 +1259,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         gamemode="Mode de jeu par défaut",
         add_admin="Pseudo Minecraft à promouvoir opérateur",
         add_whitelist="Pseudos à ajouter à la whitelist (séparés par virgule)",
+        remove_whitelist="Pseudos à retirer de la whitelist (séparés par virgule)",
         icon_url="URL d'une image PNG 64×64 pour l'icône du serveur",
     )
     @app_commands.choices(
@@ -1276,6 +1280,7 @@ def setup(tree: app_commands.CommandTree) -> None:
         gamemode: str | None = None,
         add_admin: str | None = None,
         add_whitelist: str | None = None,
+        remove_whitelist: str | None = None,
         icon_url: str | None = None,
     ):
         assert interaction.guild is not None
@@ -1292,6 +1297,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             return
 
         server_data = config["guilds"][guild_str]["servers"][server]
+        whitelist_to_remove = [n.strip() for n in (remove_whitelist or "").split(",") if n.strip()]
         instance_id = server_data.get("instance_id")
         region = server_data.get("region", "eu-north-1")
 
@@ -1313,6 +1319,7 @@ def setup(tree: app_commands.CommandTree) -> None:
                 gamemode=gamemode,
                 ops_to_add=ops_to_add,
                 whitelist_to_add=whitelist_to_add,
+                whitelist_to_remove=whitelist_to_remove,
                 icon_url=icon_url,
                 uuid_errors=uuid_errors,
             )
@@ -1335,6 +1342,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             and gamemode is None
             and not ops_to_add
             and not whitelist_to_add
+            and not whitelist_to_remove
             and not icon_url
         ):
             await interaction.response.send_message(":x: " + "\n".join(uuid_errors), ephemeral=True)
@@ -1350,6 +1358,7 @@ def setup(tree: app_commands.CommandTree) -> None:
             gamemode=gamemode,
             ops_to_add=ops_to_add or None,
             whitelist_to_add=whitelist_to_add or None,
+            whitelist_to_remove=whitelist_to_remove or None,
             icon_url=icon_url,
         )
 
