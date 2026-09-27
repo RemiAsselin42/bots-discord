@@ -41,9 +41,10 @@ import json, os
 def read_json(path):
     try:
         with open(path, encoding="utf-8") as f:
-            return json.load(f)
+            content = f.read()
     except FileNotFoundError:
         return []
+    return json.loads(content) if content.strip() else []
 
 props = dict(
     line.strip().split("=", 1)

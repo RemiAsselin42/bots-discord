@@ -65,6 +65,18 @@ def test_migration_keeps_data_and_is_idempotent(tmp_path: Path):
     assert json.loads((tmp_path / "whitelist.json").read_text()) == whitelist[:1]
 
 
+@pytest.mark.skipif(BASH is None, reason="bash introuvable")
+def test_migration_accepts_empty_whitelist_file(tmp_path: Path):
+    # Cas réel (dimicraft) : whitelist.json de 0 octet, enforce-whitelist déjà à true
+    (tmp_path / "server.properties").write_text("white-list=false\nenforce-whitelist=true\n")
+    (tmp_path / "whitelist.json").write_text("")
+    (tmp_path / "world" / "playerdata").mkdir(parents=True)
+    (tmp_path / "world" / "playerdata" / f"{ALICE}.dat").write_bytes(b"")
+
+    assert "Whitelist activée" in whitelist_notice(_run(tmp_path))
+    assert json.loads((tmp_path / "whitelist.json").read_text()) == [{"uuid": ALICE, "name": ALICE}]
+
+
 def test_format_properties_masks_secrets_and_lists_players():
     raw = _FILE_SEP.join(
         [
