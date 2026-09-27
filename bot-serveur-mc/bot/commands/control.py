@@ -19,6 +19,66 @@ from bot.ssh import get_instance_public_ip
 from bot.tasks import notify_restart_ready, notify_server_ready
 
 
+async def _ssh_host_for(server_config: dict) -> str | None:
+    """Hôte SSH explicite de la config, sinon IP publique de l'instance EC2 (None si indisponible)."""
+    ssh_host = server_config.get("ssh_host") or None
+    instance_id = server_config.get("instance_id")
+    if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
+        try:
+            ssh_host = await asyncio.to_thread(
+                get_instance_public_ip, instance_id, server_config.get("region", "eu-north-1")
+            )
+        except Exception:
+            ssh_host = None
+    return ssh_host
+
+
+async def _restart_java(
+    interaction: discord.Interaction, server: str, server_config: dict, ssh_host: str | None
+) -> None:
+    """Arrête puis relance le processus Java et notifie quand il est prêt (réponse déjà différée)."""
+    name = server_config.get("name", server)
+
+    # Étape 1 : arrêt du processus Java (sans EC2)
+    success, output = await asyncio.to_thread(stop_minecraft_server, server, host=ssh_host)
+    if not success:
+        await interaction.followup.send(
+            f":x: Impossible d'arrêter le serveur **{name}** :\n```\n{output}\n```",
+            ephemeral=True,
+        )
+        return
+
+    # Étape 2 : relance du processus Java
+    max_ram = server_config.get("max_ram", "1536M")
+    min_ram = server_config.get("min_ram", "1024M")
+    success, output = await asyncio.to_thread(
+        start_minecraft_process, server, max_ram=max_ram, min_ram=min_ram, host=ssh_host
+    )
+    if not success:
+        await interaction.followup.send(
+            f":x: Impossible de relancer le serveur **{name}** :\n```\n{output}\n```",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.followup.send(
+        f":arrows_counterclockwise: Le serveur **{name}** redémarre… Je vous notifie dès qu'il est prêt !"
+        + whitelist_notice(output)
+    )
+
+    restart_channel_id = interaction.channel_id
+    assert restart_channel_id is not None
+    asyncio.create_task(
+        notify_restart_ready(
+            bot=interaction.client,
+            channel_id=restart_channel_id,
+            server_name=name,
+            server_key=server,
+            ssh_host=ssh_host,
+        )
+    )
+
+
 def _get_instance_state(instance_id: str, region: str) -> str | None:
     """Retourne l'état courant de l'instance EC2 ou None en cas d'erreur."""
     try:
@@ -230,57 +290,9 @@ def setup(tree: app_commands.CommandTree) -> None:
             )
             return
 
-        name = server_config.get("name", server)
-        instance_id = server_config.get("instance_id")
-        region = server_config.get("region", "eu-north-1")
-        ssh_host = server_config.get("ssh_host") or None
-
-        if not ssh_host and isinstance(instance_id, str) and instance_id.startswith("i-"):
-            try:
-                ssh_host = await asyncio.to_thread(get_instance_public_ip, instance_id, region)
-            except Exception:
-                ssh_host = None
-
+        ssh_host = await _ssh_host_for(server_config)
         await interaction.response.defer()
-
-        # Étape 1 : arrêt du processus Java (sans EC2)
-        success, output = await asyncio.to_thread(stop_minecraft_server, server, host=ssh_host)
-        if not success:
-            await interaction.followup.send(
-                f":x: Impossible d'arrêter le serveur **{name}** :\n```\n{output}\n```",
-                ephemeral=True,
-            )
-            return
-
-        # Étape 2 : relance du processus Java
-        max_ram = server_config.get("max_ram", "1536M")
-        min_ram = server_config.get("min_ram", "1024M")
-        success, output = await asyncio.to_thread(
-            start_minecraft_process, server, max_ram=max_ram, min_ram=min_ram, host=ssh_host
-        )
-        if not success:
-            await interaction.followup.send(
-                f":x: Impossible de relancer le serveur **{name}** :\n```\n{output}\n```",
-                ephemeral=True,
-            )
-            return
-
-        await interaction.followup.send(
-            f":arrows_counterclockwise: Le serveur **{name}** redémarre… Je vous notifie dès qu'il est prêt !"
-            + whitelist_notice(output)
-        )
-
-        restart_channel_id = interaction.channel_id
-        assert restart_channel_id is not None
-        asyncio.create_task(
-            notify_restart_ready(
-                bot=interaction.client,
-                channel_id=restart_channel_id,
-                server_name=name,
-                server_key=server,
-                ssh_host=ssh_host,
-            )
-        )
+        await _restart_java(interaction, server, server_config, ssh_host)
 
     @tree.command(name="status", description="Vérifie le statut du serveur Minecraft")
     @app_commands.describe(server="Sélectionnez le serveur à vérifier")
