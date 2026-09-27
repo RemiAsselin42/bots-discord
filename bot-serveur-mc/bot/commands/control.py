@@ -5,15 +5,17 @@ from discord import app_commands
 
 from bot.autocomplete import server_autocomplete
 from bot.aws import format_boto_error, get_ec2_client
-from bot.config import get_server_config, load_config
-from bot.helpers import is_valid_instance_id, require_guild
+from bot.config import SERVER_TYPE_BEDROCK, get_server_config, load_config
+from bot.helpers import is_valid_instance_id, require_admin, require_guild
 from bot.minecraft_process import (
     check_other_mc_servers_running,
     is_minecraft_process_running,
     start_minecraft_process,
     stop_minecraft_server,
+    update_bedrock_plugins,
     whitelist_notice,
 )
+from bot.papermc import get_viaversion_jar_url
 from bot.permissions import check_permission
 from bot.ssh import get_instance_public_ip
 from bot.tasks import notify_restart_ready, notify_server_ready
@@ -292,6 +294,68 @@ def setup(tree: app_commands.CommandTree) -> None:
 
         ssh_host = await _ssh_host_for(server_config)
         await interaction.response.defer()
+        await _restart_java(interaction, server, server_config, ssh_host)
+
+    @tree.command(
+        name="update",
+        description="Met à jour Geyser, Floodgate et ViaVersion d'un serveur Bedrock, puis le redémarre",
+    )
+    @app_commands.describe(server="Sélectionnez le serveur Bedrock à mettre à jour")
+    @app_commands.autocomplete(server=server_autocomplete)
+    @require_guild
+    @require_admin
+    async def update_command(interaction: discord.Interaction, server: str):
+        assert interaction.guild is not None
+
+        server_config = get_server_config(interaction.guild.id, server, load_config())
+        if not server_config:
+            await interaction.response.send_message(
+                ":x: Serveur introuvable dans la configuration.", ephemeral=True
+            )
+            return
+
+        name = server_config.get("name", server)
+        if server_config.get("server_type") != SERVER_TYPE_BEDROCK:
+            await interaction.response.send_message(
+                f":x: **{name}** n'est pas un serveur Bedrock : rien à mettre à jour.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        ssh_host = await _ssh_host_for(server_config)
+
+        try:
+            viaversion_url = await get_viaversion_jar_url()
+        except Exception as e:
+            await interaction.followup.send(
+                f":x: Impossible de résoudre la dernière version de ViaVersion : {e}",
+                ephemeral=True,
+            )
+            return
+
+        success, output = await asyncio.to_thread(
+            update_bedrock_plugins, server, viaversion_url, host=ssh_host
+        )
+        if not success:
+            await interaction.followup.send(
+                f":x: Échec de la mise à jour de **{name}** :\n```\n{output[:1800]}\n```",
+                ephemeral=True,
+            )
+            return
+
+        _, running = await asyncio.to_thread(is_minecraft_process_running, server, host=ssh_host)
+        if not running:
+            await interaction.followup.send(
+                f":white_check_mark: Geyser, Floodgate et ViaVersion de **{name}** mis à jour. "
+                "Ils seront chargés au prochain `/start`."
+            )
+            return
+
+        await interaction.followup.send(
+            f":white_check_mark: Geyser, Floodgate et ViaVersion de **{name}** mis à jour, "
+            "redémarrage pour les charger…"
+        )
         await _restart_java(interaction, server, server_config, ssh_host)
 
     @tree.command(name="status", description="Vérifie le statut du serveur Minecraft")

@@ -838,3 +838,47 @@ PYEOF
         summary = "\n".join(changes)
         return (True, summary)
     return (False, f":x: Erreur SSH:\n{output}")
+
+
+# Remplacement atomique des jars Bedrock : l'ancien reste en place si le téléchargement
+# échoue, et le JVM garde l'ancien inode si le serveur tourne (appliqué au prochain démarrage).
+# Attend $VIAVERSION_URL et le dossier du serveur comme cwd.
+_UPDATE_BEDROCK_PLUGINS = f"""
+cd plugins
+dl() {{ wget -nv "$1" -O "$2.tmp" && mv -f "$2.tmp" "$2" || {{ rm -f "$2.tmp"; echo "Échec du téléchargement : $2" >&2; return 1; }}; }}
+dl "{GEYSER_SPIGOT_URL}" Geyser-Spigot.jar
+dl "{FLOODGATE_SPIGOT_URL}" floodgate-spigot.jar
+dl "$VIAVERSION_URL" ViaVersion.jar
+"""
+
+
+def update_bedrock_plugins(
+    server_key: str,
+    viaversion_url: str,
+    *,
+    host: str | None = None,
+    user: str | None = None,
+    key_path: str | None = None,
+) -> tuple[bool, str]:
+    """Remplace Geyser, Floodgate et ViaVersion par leurs derniers builds via SSH.
+
+    Returns:
+        (success, message)
+    """
+    _user = user or MC_SERVER_USER
+    _key_path = key_path or MC_SERVER_KEY_PATH
+
+    if not _key_path:
+        return (False, "Variable MC_SERVER_KEY_PATH requise.")
+    try:
+        _host = _resolve_host(host)
+    except Exception as e:
+        return (False, f"Impossible de résoudre l'hôte SSH : {e}")
+
+    command = f"""
+set -e
+cd "/home/{_user}/minecraft-servers/{server_key}"
+VIAVERSION_URL="{viaversion_url}"
+{_UPDATE_BEDROCK_PLUGINS}
+"""
+    return ssh_execute(_host, _user, _key_path, command, timeout=120)

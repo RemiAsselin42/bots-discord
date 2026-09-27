@@ -47,6 +47,7 @@ Bot Discord pour gérer plusieurs serveurs Minecraft EC2 sur AWS avec autocompl�
 | `/editserver [serveur]`         | Modifie la configuration d'un serveur existant                                            |
 | `/properties [serveur]`         | Modifie les propriétés du serveur (motd, max_players, ops, whitelist, icône)             |
 | `/list-properties [serveur]`    | Affiche en privé `server.properties` (secrets masqués), la whitelist et les ops           |
+| `/update [serveur]`             | Serveur Bedrock uniquement : met à jour Geyser, Floodgate et ViaVersion puis redémarre Java |
 | `/logs [serveur] [number]`      | Affiche les dernières lignes de logs de la console (max 100 lignes)                      |
 | `/setchannel [canal]`           | Définit le canal de notifications (auto-stop, etc.)                                       |
 | `/setpermission [cmd] [rôle]`   | Autorise un rôle Discord à utiliser `/start` ou `/stop`                                  |
@@ -129,7 +130,7 @@ bot-serveur-mc/
 ├── main.py                     # Point d'entrée : initialisation du bot
 ├── bot/
 │   ├── commands/
-│   │   ├── control.py          # /start, /stop, /restart, /status
+│   │   ├── control.py          # /start, /stop, /restart, /update, /status
 │   │   ├── info.py             # /list, /ip, /uptime
 │   │   ├── stats.py            # /players
 │   │   ├── logs.py             # /logs, /list-properties (lecture via SSH)
@@ -251,6 +252,10 @@ Si l'instance est arrêtée, le bot propose de la démarrer avant la modificatio
 ### Commande `/logs`
 
 Récupère via SSH les dernières lignes de log du serveur (jusqu'à 100 lignes). Lit `logs/latest.log` en priorité, puis `stdout.log` en fallback. Le résultat est découpé automatiquement en plusieurs messages si le contenu dépasse la limite Discord.
+
+### Commande `/update`
+
+Réservée aux serveurs de type Bedrock. Les consoles (Switch, PlayStation, Xbox) sont toujours sur la dernière version Bedrock et ne peuvent pas en choisir une autre : Geyser doit donc suivre. La commande retélécharge les derniers builds de Geyser, Floodgate et ViaVersion dans `plugins/` (remplacement atomique : l'ancien jar est conservé si un téléchargement échoue), puis redémarre le processus Java s'il tournait. Paper n'est pas touché : ViaVersion fait le pont entre le protocole Java récent parlé par Geyser et la version du serveur.
 
 ### Paramètres par défaut de la guild
 
