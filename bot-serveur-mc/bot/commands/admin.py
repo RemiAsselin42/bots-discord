@@ -975,6 +975,8 @@ def setup(tree: app_commands.CommandTree) -> None:
         instance_id="Nouvel ID d'instance EC2",
         region="Nouvelle région AWS",
         hourly_cost="Nouveau coût horaire en $",
+        max_ram="RAM max du processus Java (-Xmx), ex: 2560M ou 2G",
+        min_ram="RAM min du processus Java (-Xms), ex: 1G",
     )
     @app_commands.autocomplete(server=server_autocomplete)
     @require_guild
@@ -986,6 +988,8 @@ def setup(tree: app_commands.CommandTree) -> None:
         instance_id: str | None = None,
         region: str | None = None,
         hourly_cost: float | None = None,
+        max_ram: str | None = None,
+        min_ram: str | None = None,
     ):
 
         assert interaction.guild is not None
@@ -995,6 +999,16 @@ def setup(tree: app_commands.CommandTree) -> None:
                 ":x: Format d'instance_id invalide. Exemple: `i-0123456789abcdef0`", ephemeral=True
             )
             return
+
+        max_ram = max_ram.upper() if max_ram else None
+        min_ram = min_ram.upper() if min_ram else None
+        for ram in (max_ram, min_ram):
+            if ram is not None and not re.match(r"^\d+[GM]$", ram):
+                await interaction.response.send_message(
+                    ":x: Format de RAM invalide. Exemples : `2G`, `1536M` (entiers uniquement).",
+                    ephemeral=True,
+                )
+                return
 
         guild_str = str(interaction.guild.id)
         config = load_config()
@@ -1023,6 +1037,12 @@ def setup(tree: app_commands.CommandTree) -> None:
         if hourly_cost is not None:
             server_data["hourly_cost"] = hourly_cost
             changes.append(f"• Coût horaire: `${hourly_cost:.4f}`")
+        if max_ram is not None:
+            server_data["max_ram"] = max_ram
+            changes.append(f"• RAM max (-Xmx): `{max_ram}`")
+        if min_ram is not None:
+            server_data["min_ram"] = min_ram
+            changes.append(f"• RAM min (-Xms): `{min_ram}`")
 
         if not changes:
             await interaction.response.send_message(
