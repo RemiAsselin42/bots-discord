@@ -3,12 +3,10 @@ Tests pour bot/tasks.py — notify_server_ready et auto_stop_loop.
 
 Stratégie :
 - Les appels boto3 (synchrones) sont mockés via MagicMock.
-- Les appels mcstatus (async) sont mockés via AsyncMock.
-- Les phases SSH et RCON (bot.ssh.*) sont mockées via patch + MagicMock/AsyncMock.
+- Les appels SSH/RCON (asyncio.to_thread) sont rejoués dans l'ordre d'appel.
 - Le bot Discord est un MagicMock dont get_channel() retourne un canal fictif.
 """
 
-import asyncio
 import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -203,7 +201,14 @@ def clear_idle_tracker():
     _idle_since.clear()
 
 
-def _server_config(duckdns: str | None = "mc-test") -> dict:
+KEY = ("123", "survival")
+IP = "1.2.3.4"  # PublicIpAddress servie par _ec2_state()
+NO_PLAYERS = (True, "There are 0 of a max of 20 players online: ")
+TWO_PLAYERS = (True, "There are 2 of a max of 20 players online: Alice, Bob")
+RCON_DOWN = (False, "Connection refused")
+
+
+def _server_config() -> dict:
     return {
         "name": "Survie",
         "instance_id": "i-0123456789abcdef0",
@@ -211,8 +216,48 @@ def _server_config(duckdns: str | None = "mc-test") -> dict:
         "minecraft_port": "25565",
         "hourly_cost": 0.0416,
         "idle_timeout_minutes": _DEFAULT_IDLE_TIMEOUT,
-        "duckdns_domain": duckdns,
     }
+
+
+def _idle_for(minutes: int) -> None:
+    """Pré-remplit le tracker comme si « survival » était inactif depuis `minutes`."""
+    _idle_since[KEY] = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=minutes
+    )
+
+
+async def _run(
+    bot: MagicMock,
+    ec2: MagicMock,
+    results: list,
+    notification_channel_id: int | None = None,
+    server_config: dict | None = None,
+) -> list[tuple[str, dict]]:
+    """Exécute un cycle auto-stop pour « survival ».
+
+    `results` est rejoué dans l'ordre des appels asyncio.to_thread (RCON list, pgrep,
+    stop, check_other…) ; un appel de trop lève StopIteration et fait échouer le test.
+    Retourne la liste (nom_fonction, kwargs) des appels effectués.
+    """
+    calls: list[tuple[str, dict]] = []
+    it = iter(results)
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        calls.append((fn.__name__, kwargs))
+        return next(it)
+
+    with (
+        patch("bot.tasks.get_ec2_client", return_value=ec2),
+        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
+    ):
+        await _check_and_stop_if_idle(
+            bot=bot,
+            guild_str="123",
+            server_key="survival",
+            server_config=server_config or _server_config(),
+            notification_channel_id=notification_channel_id,
+        )
+    return calls
 
 
 async def test_idle_check_skipped_when_instance_stopped():
@@ -220,149 +265,10 @@ async def test_idle_check_skipped_when_instance_stopped():
     ec2 = MagicMock()
     ec2.describe_instance_status.return_value = {"InstanceStatuses": []}
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2):
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=None,
-        )
+    calls = await _run(bot, ec2, [])
 
+    assert calls == []
     ec2.stop_instances.assert_not_called()
-
-
-async def test_idle_timer_starts_on_zero_players():
-    bot = _make_bot()
-    ec2 = _ec2_state("running")
-
-    mc_status = MagicMock()
-    mc_status.players.online = 0
-    mc_server = MagicMock()
-    mc_server.async_status = AsyncMock(return_value=mc_status)
-
-    with (
-        patch("bot.tasks.get_ec2_client", return_value=ec2),
-        patch("bot.tasks.JavaServer") as mock_java,
-    ):
-        mock_java.lookup.return_value = mc_server
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=None,
-        )
-
-    key = ("123", "survival")
-    assert key in _idle_since
-    assert _idle_since[key] is not None
-    ec2.stop_instances.assert_not_called()
-
-
-async def test_idle_timer_resets_when_players_join():
-    bot = _make_bot()
-    ec2 = _ec2_state("running")
-
-    # Pré-remplir le tracker comme si le serveur était déjà inactif
-    key = ("123", "survival")
-    _idle_since[key] = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=10)
-
-    mc_status = MagicMock()
-    mc_status.players.online = 2  # joueurs connectés
-    mc_server = MagicMock()
-    mc_server.async_status = AsyncMock(return_value=mc_status)
-
-    with (
-        patch("bot.tasks.get_ec2_client", return_value=ec2),
-        patch("bot.tasks.JavaServer") as mock_java,
-    ):
-        mock_java.lookup.return_value = mc_server
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=None,
-        )
-
-    assert _idle_since.get(key) is None
-    ec2.stop_instances.assert_not_called()
-
-
-async def test_auto_stop_triggered_after_timeout():
-    send = AsyncMock()
-    bot = _make_bot(send)
-    ec2 = _ec2_state("running")
-
-    key = ("123", "survival")
-    # Simuler une inactivité bien au-delà du timeout
-    _idle_since[key] = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=60)
-
-    mc_status = MagicMock()
-    mc_status.players.online = 0
-    mc_server = MagicMock()
-    mc_server.async_status = AsyncMock(return_value=mc_status)
-
-    # asyncio.to_thread appelle stop_minecraft_server puis check_other_mc_servers_running
-    to_thread_results = iter([(True, "stopped"), (True, [])])
-
-    async def fake_to_thread_autostop(fn, *args, **kwargs):
-        return next(to_thread_results)
-
-    with (
-        patch("bot.tasks.get_ec2_client", return_value=ec2),
-        patch("bot.tasks.JavaServer") as mock_java,
-        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread_autostop),
-    ):
-        mock_java.lookup.return_value = mc_server
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=99,
-        )
-
-    ec2.stop_instances.assert_called_once_with(InstanceIds=["i-0123456789abcdef0"])
-    send.assert_awaited_once()
-    assert "Auto-stop" in send.call_args[0][0]
-    assert key not in _idle_since
-
-
-async def test_auto_stop_no_notification_when_no_channel():
-    bot = _make_bot()
-    ec2 = _ec2_state("running")
-
-    key = ("123", "survival")
-    _idle_since[key] = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=60)
-
-    mc_status = MagicMock()
-    mc_status.players.online = 0
-    mc_server = MagicMock()
-    mc_server.async_status = AsyncMock(return_value=mc_status)
-
-    to_thread_results = iter([(True, "stopped"), (True, [])])
-
-    async def fake_to_thread_autostop(fn, *args, **kwargs):
-        return next(to_thread_results)
-
-    with (
-        patch("bot.tasks.get_ec2_client", return_value=ec2),
-        patch("bot.tasks.JavaServer") as mock_java,
-        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread_autostop),
-    ):
-        mock_java.lookup.return_value = mc_server
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=None,  # pas de canal configuré
-        )
-
-    ec2.stop_instances.assert_called_once()
-    bot.get_channel.assert_not_called()
 
 
 async def test_idle_check_skipped_on_invalid_instance_id():
@@ -370,19 +276,126 @@ async def test_idle_check_skipped_on_invalid_instance_id():
     ec2 = MagicMock()
     bad_config = {**_server_config(), "instance_id": "invalid"}
 
-    with patch("bot.tasks.get_ec2_client", return_value=ec2):
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=bad_config,
-            notification_channel_id=None,
-        )
+    await _run(bot, ec2, [], server_config=bad_config)
 
     ec2.describe_instance_status.assert_not_called()
 
 
-# ── Logique zombie (MC injoignable) ──────────────────────────────────────────
+async def test_skipped_when_no_public_ip():
+    """Pas d'IP publique → état inconnu : ni appel SSH, ni arrêt, compteur intact."""
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+    ec2.describe_instances.return_value = {
+        "Reservations": [{"Instances": [{"State": {"Name": "running"}}]}]
+    }
+    _idle_for(60)
+
+    calls = await _run(bot, ec2, [])
+
+    assert calls == []
+    ec2.stop_instances.assert_not_called()
+    assert _idle_since[KEY] is not None
+
+
+async def test_idle_timer_starts_on_zero_players():
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+
+    await _run(bot, ec2, [NO_PLAYERS])
+
+    assert _idle_since.get(KEY) is not None
+    ec2.stop_instances.assert_not_called()
+
+
+async def test_idle_timer_resets_when_players_join():
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+    _idle_for(10)
+
+    await _run(bot, ec2, [TWO_PLAYERS])
+
+    assert _idle_since.get(KEY) is None
+    ec2.stop_instances.assert_not_called()
+
+
+async def test_players_online_block_auto_stop_past_timeout():
+    """`list` RCON annonce des joueurs → jamais d'arrêt, même compteur d'inactivité dépassé."""
+    send = AsyncMock()
+    bot = _make_bot(send)
+    ec2 = _ec2_state("running")
+    _idle_for(60)
+
+    calls = await _run(bot, ec2, [TWO_PLAYERS], notification_channel_id=99)
+
+    ec2.stop_instances.assert_not_called()
+    assert _idle_since.get(KEY) is None
+    send.assert_not_awaited()
+    assert [n for n, _ in calls] == ["check_rcon_ready"]
+
+
+async def test_rcon_ok_unparsable_output_no_timer():
+    """RCON répond mais sans compte de joueurs (mcrcon absent) → inconnu : compteur remis à zéro."""
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+    _idle_for(60)
+
+    calls = await _run(bot, ec2, [(True, "RCON port ouvert (mcrcon absent)")])
+
+    ec2.stop_instances.assert_not_called()
+    assert _idle_since.get(KEY) is None
+    assert [n for n, _ in calls] == ["check_rcon_ready"]
+
+
+async def test_auto_stop_triggered_after_timeout():
+    send = AsyncMock()
+    bot = _make_bot(send)
+    ec2 = _ec2_state("running")
+    _idle_for(60)
+
+    calls = await _run(
+        bot, ec2, [NO_PLAYERS, (True, "stopped"), (True, [])], notification_channel_id=99
+    )
+
+    ec2.stop_instances.assert_called_once_with(InstanceIds=["i-0123456789abcdef0"])
+    send.assert_awaited_once()
+    assert "Auto-stop" in send.call_args[0][0]
+    assert KEY not in _idle_since
+    assert [n for n, _ in calls] == [
+        "check_rcon_ready",
+        "stop_minecraft_server",
+        "check_other_mc_servers_running",
+    ]
+
+
+async def test_auto_stop_no_notification_when_no_channel():
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+    _idle_for(60)
+
+    await _run(bot, ec2, [NO_PLAYERS, (True, "stopped"), (True, [])])
+
+    ec2.stop_instances.assert_called_once()
+    bot.get_channel.assert_not_called()
+
+
+async def test_ssh_calls_target_server_instance_ip():
+    """Tous les appels SSH visent l'IP publique de l'instance du serveur, pas le fallback global."""
+    bot = _make_bot()
+    ec2 = _ec2_state("running")
+    _idle_for(60)
+
+    calls = await _run(bot, ec2, [NO_PLAYERS, (True, "stopped"), (True, [])])
+
+    ec2.describe_instances.assert_called_with(InstanceIds=["i-0123456789abcdef0"])
+    assert all(kw.get("host") == IP for _, kw in calls)
+    assert [n for n, _ in calls] == [
+        "check_rcon_ready",
+        "stop_minecraft_server",
+        "check_other_mc_servers_running",
+    ]
+
+
+# ── Logique zombie (RCON injoignable) ────────────────────────────────────────
 
 
 async def test_zombie_ssh_unreachable_instance_preserved():
@@ -391,26 +404,7 @@ async def test_zombie_ssh_unreachable_instance_preserved():
     bot = _make_bot()
     ec2 = _ec2_state("running")
 
-    mc_server = MagicMock()
-    mc_server.async_status = AsyncMock(side_effect=Exception("Connection refused"))
-
-    async def fake_to_thread(fn, *args, **kwargs):
-        # SSH injoignable : ssh_ok=False
-        return (False, False)
-
-    with (
-        patch("bot.tasks.get_ec2_client", return_value=ec2),
-        patch("bot.tasks.JavaServer") as mock_java,
-        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
-    ):
-        mock_java.lookup.return_value = mc_server
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=None,
-        )
+    await _run(bot, ec2, [RCON_DOWN, (False, False)])
 
     ec2.stop_instances.assert_not_called()
 
@@ -421,26 +415,7 @@ async def test_zombie_java_running_instance_preserved():
     bot = _make_bot()
     ec2 = _ec2_state("running")
 
-    mc_server = MagicMock()
-    mc_server.async_status = AsyncMock(side_effect=asyncio.TimeoutError())
-
-    async def fake_to_thread(fn, *args, **kwargs):
-        # SSH ok, Java tourne encore
-        return (True, True)
-
-    with (
-        patch("bot.tasks.get_ec2_client", return_value=ec2),
-        patch("bot.tasks.JavaServer") as mock_java,
-        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
-    ):
-        mock_java.lookup.return_value = mc_server
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=None,
-        )
+    await _run(bot, ec2, [RCON_DOWN, (True, True)])
 
     ec2.stop_instances.assert_not_called()
 
@@ -451,33 +426,7 @@ async def test_zombie_other_servers_active_instance_preserved():
     bot = _make_bot()
     ec2 = _ec2_state("running")
 
-    mc_server = MagicMock()
-    mc_server.async_status = AsyncMock(side_effect=Exception("Connection refused"))
-
-    call_index = 0
-
-    async def fake_to_thread(fn, *args, **kwargs):
-        nonlocal call_index
-        call_index += 1
-        if call_index == 1:
-            # is_minecraft_process_running : SSH ok, Java arrêté
-            return (True, False)
-        # check_other_mc_servers_running : check réussi, autres serveurs actifs
-        return (True, ["creative"])
-
-    with (
-        patch("bot.tasks.get_ec2_client", return_value=ec2),
-        patch("bot.tasks.JavaServer") as mock_java,
-        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
-    ):
-        mock_java.lookup.return_value = mc_server
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=None,
-        )
+    await _run(bot, ec2, [RCON_DOWN, (True, False), (True, ["creative"])])
 
     ec2.stop_instances.assert_not_called()
 
@@ -489,36 +438,16 @@ async def test_zombie_no_other_servers_instance_stopped():
     bot = _make_bot(send)
     ec2 = _ec2_state("running")
 
-    mc_server = MagicMock()
-    mc_server.async_status = AsyncMock(side_effect=Exception("Connection refused"))
-
-    call_index = 0
-
-    async def fake_to_thread(fn, *args, **kwargs):
-        nonlocal call_index
-        call_index += 1
-        if call_index == 1:
-            # is_minecraft_process_running : SSH ok, Java arrêté
-            return (True, False)
-        # check_other_mc_servers_running : check réussi, aucun autre serveur
-        return (True, [])
-
-    with (
-        patch("bot.tasks.get_ec2_client", return_value=ec2),
-        patch("bot.tasks.JavaServer") as mock_java,
-        patch("bot.tasks.asyncio.to_thread", side_effect=fake_to_thread),
-    ):
-        mock_java.lookup.return_value = mc_server
-        await _check_and_stop_if_idle(
-            bot=bot,
-            guild_str="123",
-            server_key="survival",
-            server_config=_server_config(),
-            notification_channel_id=99,
-        )
+    calls = await _run(bot, ec2, [RCON_DOWN, (True, False), (True, [])], notification_channel_id=99)
 
     ec2.stop_instances.assert_called_once_with(InstanceIds=["i-0123456789abcdef0"])
     send.assert_awaited_once()
     msg = send.call_args[0][0]
     assert "zombie" in msg.lower()
     assert "Auto-stop" in msg
+    assert all(kw.get("host") == IP for _, kw in calls)
+    assert [n for n, _ in calls] == [
+        "check_rcon_ready",
+        "is_minecraft_process_running",
+        "check_other_mc_servers_running",
+    ]

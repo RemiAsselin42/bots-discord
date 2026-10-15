@@ -197,11 +197,11 @@ La liste des mods Fabric peut être personnalisée via la clé `optimization_mod
 
 ### Auto-stop
 
-La boucle `auto_stop_loop` s'exécute toutes les 5 minutes. Pour chaque serveur en état `running`, elle pinge le serveur Minecraft via `mcstatus` puis applique deux logiques d'arrêt distinctes :
+La boucle `auto_stop_loop` s'exécute toutes les 5 minutes. Pour chaque serveur en état `running`, elle interroge `list` via RCON sur l'instance (SSH vers l'IP publique de l'instance du serveur, ou `ssh_host` si défini) puis applique deux logiques d'arrêt distinctes :
 
 #### Arrêt par inactivité
 
-Le serveur Minecraft répond au ping mais aucun joueur n'est connecté. Si cette situation dure plus de `idle_timeout_minutes` minutes (défaut : 30 min), l'arrêt est déclenché :
+Le serveur Minecraft répond à `list` mais aucun joueur n'est connecté. Si cette situation dure plus de `idle_timeout_minutes` minutes (défaut : 30 min), l'arrêt est déclenché :
 
 1. Arrêt gracieux du processus Java via RCON.
 2. Vérification SSH des autres serveurs sur la même instance.
@@ -211,7 +211,7 @@ Notification Discord : `:red_circle: **Auto-stop** : … après X minutes sans j
 
 #### Arrêt zombie
 
-Le serveur Minecraft ne répond plus au ping (timeout `mcstatus`). Deux causes possibles : le serveur est encore en cours de démarrage, ou le processus Java s'est arrêté anormalement en laissant l'instance EC2 allumée.
+RCON ne répond pas (`list` échoue). Deux causes possibles : le serveur est encore en cours de démarrage, ou le processus Java s'est arrêté anormalement en laissant l'instance EC2 allumée. Si RCON répond mais que la sortie de `list` est inexploitable (mcrcon absent), le compteur est remis à zéro et rien n'est arrêté.
 
 Le bot vérifie via SSH si le processus Java est toujours en cours d'exécution :
 

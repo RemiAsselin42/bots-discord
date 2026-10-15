@@ -8,13 +8,13 @@ import asyncio
 import datetime
 import logging
 import os
+import re
 
 import discord
-from mcstatus import JavaServer
 
 from bot.aws import get_ec2_client
 from bot.config import load_config
-from bot.helpers import is_valid_instance_id, resolve_duckdns_host
+from bot.helpers import is_valid_instance_id
 from bot.minecraft_process import (
     MC_SERVER_KEY_PATH,
     MC_SERVER_USER,
@@ -40,6 +40,9 @@ _RCON_READY_RETRIES = 60  # tentatives max pour attendre que RCON soit dispo (60
 _RCON_READY_INTERVAL = 10  # secondes entre chaque tentative RCON
 _AUTO_STOP_INTERVAL = 300  # intervalle de la boucle auto-stop (5 minutes)
 _DEFAULT_IDLE_TIMEOUT = 30  # minutes d'inactivité avant arrêt automatique
+
+# Sortie de `list` via RCON : "There are 2 of a max of 20 players online: a, b"
+_PLAYERS_ONLINE_RE = re.compile(r"There are (\d+)")
 
 
 # ── Notification de démarrage ────────────────────────────────────────────────
@@ -293,21 +296,21 @@ async def _check_and_stop_if_idle(
         logger.debug("Auto-stop [%s] vérification EC2 : %s", name, exc)
         return
 
-    # 2. Interroger le serveur Minecraft pour le nombre de joueurs
-    host = _resolve_mc_host(server_config, ec2)
-    if not host:
+    key = (guild_str, server_key)
+
+    # 2. Hôte SSH du serveur : override explicite, sinon IP publique de SON instance
+    #    (jamais le fallback global MC_SERVER_INSTANCE_ID de bot.ssh._resolve_host)
+    ssh_host = server_config.get("ssh_host") or _instance_public_ip(instance_id, ec2)
+    if not ssh_host:
+        logger.debug("Auto-stop [%s] : IP publique introuvable, serveur ignoré ce cycle", name)
         return
 
-    port = int(server_config.get("minecraft_port", "25565"))
-    try:
-        mc = JavaServer.lookup(f"{host}:{port}")
-        status = await asyncio.wait_for(mc.async_status(), timeout=5.0)
-        player_count = status.players.online
-    except (asyncio.TimeoutError, Exception):
-        # Serveur MC injoignable ou timeout : vérifier si le processus Java tourne encore via SSH.
+    # 3. Nombre de joueurs via `list` RCON exécuté sur l'instance (source de vérité unique)
+    rcon_ok, rcon_output = await asyncio.to_thread(check_rcon_ready, server_key, host=ssh_host)
+    if not rcon_ok:
+        # RCON injoignable : vérifier si le processus Java tourne encore via SSH.
         # Si Java tourne → serveur en cours de démarrage, on ne compte pas comme inactif.
         # Si Java est arrêté → instance zombie, on procède à l'arrêt EC2.
-        ssh_host = server_config.get("ssh_host") or None
         ssh_ok, java_running = await asyncio.to_thread(
             is_minecraft_process_running, server_key, host=ssh_host
         )
@@ -357,7 +360,19 @@ async def _check_and_stop_if_idle(
             logger.error("Auto-stop [%s] : échec de l'arrêt EC2 (instance zombie) : %s", name, exc)
         return
 
-    key = (guild_str, server_key)
+    match = _PLAYERS_ONLINE_RE.search(rcon_output)
+    if match is None:
+        # RCON répond mais sortie inexploitable (ex. "RCON port ouvert (mcrcon absent)") :
+        # état inconnu → jamais de compteur d'inactivité sur un inconnu
+        logger.warning(
+            "Auto-stop [%s] : sortie `list` inexploitable, compteur réinitialisé : %r",
+            name,
+            rcon_output[:200],
+        )
+        _idle_since.pop(key, None)
+        return
+    player_count = int(match.group(1))
+
     now = datetime.datetime.now(datetime.timezone.utc)
 
     if player_count > 0:
@@ -378,9 +393,6 @@ async def _check_and_stop_if_idle(
         return
 
     # Seuil atteint : arrêt automatique
-    # Résolution de l'hôte SSH : priorité à la config par serveur
-    ssh_host = server_config.get("ssh_host") or None
-
     # 1. Arrêt gracieux du processus MC via RCON
     mc_ok, _ = await asyncio.to_thread(stop_minecraft_server, server_key, host=ssh_host)
     if not mc_ok:
@@ -445,20 +457,8 @@ async def _check_and_stop_if_idle(
         logger.error("Auto-stop [%s] : échec de l'arrêt EC2 : %s", name, exc)
 
 
-def _resolve_mc_host(server_config: dict, ec2_client) -> str | None:
-    """Retourne l'adresse MC à pinguer (DuckDNS prioritaire, sinon IP publique EC2).
-
-    Ordre de priorité :
-    1. server_config["duckdns_domain"] (config par serveur)
-    2. Variable d'env DUCKDNS_DOMAIN (fallback global)
-    3. IP publique EC2 via boto3
-    """
-    duckdns = server_config.get("duckdns_domain") or os.getenv("DUCKDNS_DOMAIN")
-    if duckdns:
-        return resolve_duckdns_host(duckdns)
-
-    # Récupération de l'IP publique EC2
-    instance_id = server_config.get("instance_id")
+def _instance_public_ip(instance_id: str | None, ec2_client) -> str | None:
+    """IP publique de l'instance du serveur (None si introuvable ou erreur AWS)."""
     try:
         response = ec2_client.describe_instances(InstanceIds=[instance_id])
         instance = response["Reservations"][0]["Instances"][0]
